@@ -113,6 +113,9 @@ async def on_ready():
     await tree.sync()
     logger.info("🔔 Bot has started and is now online!")
     print("🔔 Bot has started and is now online!")
+    # Start the scheduler here
+    scheduler.start()
+    
     # Send a message to the designated channel to announce the bot is online
     channel = client.get_channel(CHANNEL_ID)
     if channel:
@@ -219,5 +222,4 @@ class Command(BaseCommand):
             else:
                 logger.warning(f"Scheduled: Failed to set max ping to {ping_2}ms")
 
-        scheduler.start()
         client.run(BOT_TOKEN)
