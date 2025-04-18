@@ -184,9 +184,9 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
                 await interaction.response.send_message("⚠️ Invalid time format. Please use hh:mm format.")
                 return
 
-            # Update the .env file with new time and ping
-            set_key(".env", "SCHEDULED_JOB_1_TIME", time)
-            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))  # Ensure ping is saved as a string (no quotes in the file)
+            # Update the .env file with new time and ping, ensuring time is quoted and ping is integer
+            set_key(".env", "SCHEDULED_JOB_1_TIME", f'"{time}"')
+            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))  # Ping value remains as integer (written as string)
 
             # Reload the .env file
             load_dotenv()
@@ -206,9 +206,9 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
                 await interaction.response.send_message("⚠️ Invalid time format. Please use hh:mm format.")
                 return
 
-            # Update the .env file with new time and ping
-            set_key(".env", "SCHEDULED_JOB_2_TIME", time)
-            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))  # Ensure ping is saved as a string (no quotes in the file)
+            # Update the .env file with new time and ping, ensuring time is quoted and ping is integer
+            set_key(".env", "SCHEDULED_JOB_2_TIME", f'"{time}"')
+            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))  # Ping value remains as integer (written as string)
 
             # Reload the .env file
             load_dotenv()
