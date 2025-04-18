@@ -195,8 +195,8 @@ async def cur_scheduled_time(interaction: discord.Interaction):
     # Create the message to send
     msg = (
         f"🕒 **Current Scheduled Job Times and Pings:**\n"
-        f"1️⃣ Job 1: Time = `{job_1_time[:2]}:{job_1_time[2:]}`, Ping = `{ping_1}` ms\n"
-        f"2️⃣ Job 2: Time = `{job_2_time[:2]}:{job_2_time[2:]}`, Ping = `{ping_2}` ms"
+        f"1️⃣ Job 1: Time = `{job_1_time}`, Ping = `{ping_1}` ms\n"
+        f"2️⃣ Job 2: Time = `{job_2_time}`, Ping = `{ping_2}` ms"
     )
 
     # Send the message
@@ -226,6 +226,7 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
         if job == 1:
             set_key(".env", "SCHEDULED_JOB_1_TIME", time)  # Write time as plain string
             set_key(".env", "SCHEDULED_JOB_1_PING", ping)  # Write ping as integer
+            logger.info(f"CALLING RESCHEDULE_JOB FOR JOB 1 - time: '{time}', ping: {ping}")
             reschedule_job("set_ping_job_1", time, ping)
             logger.info(f"User `{username}` updated Job 1: Time set to `{time[:2]}:{time[2:]}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
@@ -233,6 +234,7 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
         elif job == 2:
             set_key(".env", "SCHEDULED_JOB_2_TIME", time)  # Write time as plain string
             set_key(".env", "SCHEDULED_JOB_2_PING", ping)  # Write ping as integer
+            logger.error(f"CALLING RESCHEDULE_JOB FOR JOB 2 - time: '{time}', ping: {ping}")
             reschedule_job("set_ping_job_2", time, ping)
             logger.info(f"User `{username}` updated Job 2: Time set to `{time[:2]}:{time[2:]}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
