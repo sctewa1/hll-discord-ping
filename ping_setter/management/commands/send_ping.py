@@ -109,6 +109,22 @@ def unban_player(player_id: str) -> bool:
         logger.error(f"Failed to unban player: {e}")
         return False
 
+def reschedule_job(job_id: str, time_str: str, ping: int):
+    hour, minute = map(int, time_str.strip('"').split(":"))
+    trigger = CronTrigger(hour=hour, minute=minute, timezone=timezone(tz_name))
+
+    async def job():
+        if set_max_ping_autokick(ping):
+            logger.info(f"Rescheduled job `{job_id}`: Set max ping to {ping}ms ⏰ ({time_str})")
+            channel = client.get_channel(CHANNEL_ID)
+            if channel:
+                await channel.send(f"🔄 Max ping autokick set to `{ping}` ms (Updated schedule: {time_str})")
+        else:
+            logger.warning(f"Rescheduled job `{job_id}`: Failed to set max ping to {ping}ms")
+
+    scheduler.remove_job(job_id)
+    scheduler.add_job(job, trigger=trigger, id=job_id)
+
 # Discord bot events and commands
 @client.event
 async def on_ready():
@@ -175,54 +191,42 @@ async def cur_scheduled_time(interaction: discord.Interaction):
 @tree.command(name="setscheduledtime", description="Set the scheduled job times and ping values")
 @app_commands.describe(job="Job number (1 or 2)", time="New job time (hh:mm)", ping="New ping value in ms")
 async def set_scheduled_time(interaction: discord.Interaction, job: int, time: str, ping: int):
-    username = interaction.user.name  # Get the Discord username of the user who triggered the command
+    username = interaction.user.name
 
-    if job == 1:
-        try:
-            job_1_hour, job_1_minute = map(int, time.split(":"))
-            if not (0 <= job_1_hour < 24 and 0 <= job_1_minute < 60):
-                await interaction.response.send_message("⚠️ Invalid time format. Please use hh:mm format.")
-                return
+    # Validate time format
+    try:
+        hour, minute = map(int, time.split(":"))
+        if not (0 <= hour < 24 and 0 <= minute < 60):
+            await interaction.response.send_message("⚠️ Invalid time format. Please use hh:mm (24hr) format.")
+            return
+    except ValueError:
+        await interaction.response.send_message("⚠️ Invalid time format. Please use hh:mm (24hr) format.")
+        return
 
-            # Update the .env file with new time and ping, ensuring time is quoted and ping is integer
-            set_key(".env", "SCHEDULED_JOB_1_TIME", f'"{time}"')
-            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))  # Ping value remains as integer (written as string)
+    # Ensure time is written with quotes to .env
+    quoted_time = f'"{time}"'
 
-            # Reload the .env file
-            load_dotenv()
-
-            # Log the change with the username
+    try:
+        if job == 1:
+            set_key(".env", "SCHEDULED_JOB_1_TIME", quoted_time)
+            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))
+            reschedule_job("set_ping_job_1", time, ping)
             logger.info(f"User `{username}` updated Job 1: Time set to `{time}` and Ping set to `{ping}` ms.")
-
-            await interaction.response.send_message(f"✅ Job 1 time updated to `{time}` and ping to `{ping}` ms.")
-
-        except Exception as e:
-            await interaction.response.send_message(f"⚠️ Error: {e}")
-
-    elif job == 2:
-        try:
-            job_2_hour, job_2_minute = map(int, time.split(":"))
-            if not (0 <= job_2_hour < 24 and 0 <= job_2_minute < 60):
-                await interaction.response.send_message("⚠️ Invalid time format. Please use hh:mm format.")
-                return
-
-            # Update the .env file with new time and ping, ensuring time is quoted and ping is integer
-            set_key(".env", "SCHEDULED_JOB_2_TIME", f'"{time}"')
-            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))  # Ping value remains as integer (written as string)
-
-            # Reload the .env file
-            load_dotenv()
-
-            # Log the change with the username
+            await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time}` with ping `{ping}` ms.")
+        
+        elif job == 2:
+            set_key(".env", "SCHEDULED_JOB_2_TIME", quoted_time)
+            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))
+            reschedule_job("set_ping_job_2", time, ping)
             logger.info(f"User `{username}` updated Job 2: Time set to `{time}` and Ping set to `{ping}` ms.")
-
-            await interaction.response.send_message(f"✅ Job 2 time updated to `{time}` and ping to `{ping}` ms.")
-
-        except Exception as e:
-            await interaction.response.send_message(f"⚠️ Error: {e}")
-
-    else:
-        await interaction.response.send_message("⚠️ Invalid job number. Please choose 1 or 2.")
+            await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time}` with ping `{ping}` ms.")
+        
+        else:
+            await interaction.response.send_message("⚠️ Invalid job number. Please choose 1 or 2.")
+    
+    except Exception as e:
+        logger.error(f"Error updating schedule for Job {job}: {e}")
+        await interaction.response.send_message(f"❌ Error updating schedule: {e}")
 
 @tree.command(name="bans", description="List last 5 bans")
 async def bans(interaction: discord.Interaction):
