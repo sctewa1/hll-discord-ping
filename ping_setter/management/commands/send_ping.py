@@ -137,7 +137,26 @@ async def setping(interaction: discord.Interaction, ping: int):
         await interaction.response.send_message(f"✅ Max ping autokick set to `{ping}` ms.")
     else:
         await interaction.response.send_message("⚠️ Failed to set max ping autokick.")
-@tree.command(name="setScheduledTime", description="Set the scheduled job times and ping values")
+
+@tree.command(name="curscheduledtime", description="Show the current scheduled job times and ping values")
+async def cur_scheduled_time(interaction: discord.Interaction):
+    # Retrieve current job times and ping values from the environment
+    job_1_time = os.getenv('SCHEDULED_JOB_1_TIME', '00:01')
+    job_2_time = os.getenv('SCHEDULED_JOB_2_TIME', '15:00')
+    ping_1 = os.getenv('SCHEDULED_JOB_1_PING', 500)
+    ping_2 = os.getenv('SCHEDULED_JOB_2_PING', 320)
+
+    # Create the message to send
+    msg = (
+        f"🕒 **Current Scheduled Job Times and Pings:**\n"
+        f"1️⃣ Job 1: Time = `{job_1_time}`, Ping = `{ping_1}` ms\n"
+        f"2️⃣ Job 2: Time = `{job_2_time}`, Ping = `{ping_2}` ms"
+    )
+
+    # Send the message
+    await interaction.response.send_message(msg)
+    
+@tree.command(name="setscheduledtime", description="Set the scheduled job times and ping values")
 @app_commands.describe(job="Job number (1 or 2)", time="New job time (hh:mm)", ping="New ping value in ms")
 async def set_scheduled_time(interaction: discord.Interaction, job: int, time: str, ping: int):
     if job == 1:
