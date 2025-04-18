@@ -98,7 +98,6 @@ async def on_ready():
     await tree.sync()
     logger.info("🔔 Bot has started and is now online!")
     print("🔔 Bot has started and is now online!")
-scheduler.start()
     # Send a message to the designated channel to announce the bot is online
     channel = client.get_channel(CHANNEL_ID)
     if channel:
@@ -181,25 +180,24 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # Scheduled ping update tasks
-@scheduler.scheduled_job(CronTrigger(hour=0, minute=1))
-async def set_ping_to_500():
-    if set_max_ping_autokick(500):
-        logger.info("Scheduled: Set max ping to 500ms 🕐 (00:01)")
-        channel = client.get_channel(CHANNEL_ID)
-        if channel:
-            await channel.send("🕐 Max ping autokick set to `500` ms (Scheduled 00:01)")
-    else:
-        logger.warning("Scheduled: Failed to set max ping to 500ms")
+        @scheduler.scheduled_job(CronTrigger(hour=0, minute=1))
+        async def set_ping_to_500():
+            if set_max_ping_autokick(500):
+                logger.info("Scheduled: Set max ping to 500ms 🕐 (00:01)")
+                channel = client.get_channel(CHANNEL_ID)
+                if channel:
+                    await channel.send("🕐 Max ping autokick set to `500` ms (Scheduled 00:01)")
+            else:
+                logger.warning("Scheduled: Failed to set max ping to 500ms")
 
-@scheduler.scheduled_job(CronTrigger(hour=15, minute=0))
-async def set_ping_to_320():
-    if set_max_ping_autokick(320):
-        logger.info("Scheduled: Set max ping to 320ms 🕒 (15:00)")
-        channel = client.get_channel(CHANNEL_ID)
-        if channel:
-            await channel.send("🕒 Max ping autokick set to `320` ms (Scheduled 15:00)")
-    else:
-        logger.warning("Scheduled: Failed to set max ping to 320ms")
+        @scheduler.scheduled_job(CronTrigger(hour=15, minute=0))
+        async def set_ping_to_320():
+            if set_max_ping_autokick(320):
+                logger.info("Scheduled: Set max ping to 320ms 🕒 (15:00)")
+                channel = client.get_channel(CHANNEL_ID)
+                if channel:
+                    await channel.send("🕒 Max ping autokick set to `320` ms (Scheduled 15:00)")
+            else:
+                logger.warning("Scheduled: Failed to set max ping to 320ms")
 
         client.run(BOT_TOKEN)
-
