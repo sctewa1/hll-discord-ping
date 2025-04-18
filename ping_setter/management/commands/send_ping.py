@@ -194,12 +194,11 @@ class Command(BaseCommand):
     help = "Starts the Discord bot"
 
     def handle(self, *args, **options):
-        # Scheduled ping update tasks
-        @scheduler.scheduled_job(CronTrigger(hour=0, minute=1))
         # Parse job times from env vars
         job_1_hour, job_1_minute = map(int, job_1_time.strip('"').split(":"))
         job_2_hour, job_2_minute = map(int, job_2_time.strip('"').split(":"))
-        
+
+        # Scheduled ping update tasks
         @scheduler.scheduled_job(CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)))
         async def set_ping_job_1():
             if set_max_ping_autokick(ping_1):
@@ -209,7 +208,7 @@ class Command(BaseCommand):
                     await channel.send(f"🕐 Max ping autokick set to `{ping_1}` ms (Scheduled {job_1_time})")
             else:
                 logger.warning(f"Scheduled: Failed to set max ping to {ping_1}ms")
-        
+
         @scheduler.scheduled_job(CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)))
         async def set_ping_job_2():
             if set_max_ping_autokick(ping_2):
@@ -220,4 +219,5 @@ class Command(BaseCommand):
             else:
                 logger.warning(f"Scheduled: Failed to set max ping to {ping_2}ms")
 
+        scheduler.start()
         client.run(BOT_TOKEN)
