@@ -104,6 +104,7 @@ def unban_player(player_id: str) -> bool:
         return False
 
 def reschedule_job(job_id: str, time_str: str, ping: int):
+    logger.error(f"RESCHEDULE_JOB CALLED - job_id: {job_id}, time_str: '{time_str}', type(time_str): {type(time_str)}, ping: {ping}, type(ping): {type(ping)}")
     hour, minute = map(int, time_str.split(":"))
     trigger = CronTrigger(hour=hour, minute=minute, timezone=timezone(tz_name))
 
@@ -121,6 +122,7 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
     except Exception as e:
         logger.warning(f"Attempted to remove job `{job_id}` but it did not exist. Exception: {e}")
 
+    scheduler.add_job(scheduled_job, trigger=trigger, id=job_id, args=[time_str, ping])
     scheduler.add_job(scheduled_job, trigger=trigger, id=job_id, args=[time_str, ping])
 
 # Discord bot events and commands
