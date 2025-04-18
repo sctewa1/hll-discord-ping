@@ -218,27 +218,24 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
         await interaction.response.send_message("⚠️ Invalid time format. Please use hh:mm (24hr) format.")
         return
 
-    # Ensure time is written with quotes to .env
-    quoted_time = f'"{time}"'
-
     try:
         if job == 1:
-            set_key(".env", "SCHEDULED_JOB_1_TIME", quoted_time)
-            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))
+            set_key(".env", "SCHEDULED_JOB_1_TIME", time)
+            set_key(".env", "SCHEDULED_JOB_1_PING", ping)  # Pass 'ping' directly (it's already an int)
             reschedule_job("set_ping_job_1", time, ping)
             logger.info(f"User `{username}` updated Job 1: Time set to `{time}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time}` with ping `{ping}` ms.")
-        
+
         elif job == 2:
-            set_key(".env", "SCHEDULED_JOB_2_TIME", quoted_time)
-            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))
+            set_key(".env", "SCHEDULED_JOB_2_TIME", time)
+            set_key(".env", "SCHEDULED_JOB_2_PING", ping)  # Pass 'ping' directly (it's already an int)
             reschedule_job("set_ping_job_2", time, ping)
             logger.info(f"User `{username}` updated Job 2: Time set to `{time}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time}` with ping `{ping}` ms.")
-        
+
         else:
             await interaction.response.send_message("⚠️ Invalid job number. Please choose 1 or 2.")
-    
+
     except Exception as e:
         logger.error(f"Error updating schedule for Job {job}: {e}")
         await interaction.response.send_message(f"❌ Error updating schedule: {e}")
