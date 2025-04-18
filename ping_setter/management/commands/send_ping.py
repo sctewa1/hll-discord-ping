@@ -122,7 +122,11 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
         else:
             logger.warning(f"Rescheduled job `{job_id}`: Failed to set max ping to {ping}ms")
 
-    scheduler.remove_job(job_id)
+    try:
+        scheduler.remove_job(job_id)
+    except Exception as e:
+        logger.warning(f"Attempted to remove job `{job_id}` but it did not exist. Exception: {e}")
+
     scheduler.add_job(job, trigger=trigger, id=job_id)
 
 # Discord bot events and commands
@@ -288,12 +292,9 @@ class Command(BaseCommand):
     help = "Starts the Discord bot"
 
     def handle(self, *args, **options):
-        # Parse job times from env vars
         job_1_hour, job_1_minute = map(int, job_1_time.strip('"').split(":"))
         job_2_hour, job_2_minute = map(int, job_2_time.strip('"').split(":"))
 
-        # Scheduled ping update tasks
-        @scheduler.scheduled_job(CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)))
         async def set_ping_job_1():
             if set_max_ping_autokick(ping_1):
                 logger.info(f"Scheduled: Set max ping to {ping_1}ms 🕐 ({job_1_time})")
@@ -303,7 +304,6 @@ class Command(BaseCommand):
             else:
                 logger.warning(f"Scheduled: Failed to set max ping to {ping_1}ms")
 
-        @scheduler.scheduled_job(CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)))
         async def set_ping_job_2():
             if set_max_ping_autokick(ping_2):
                 logger.info(f"Scheduled: Set max ping to {ping_2}ms 🕒 ({job_2_time})")
@@ -312,5 +312,9 @@ class Command(BaseCommand):
                     await channel.send(f"🕒 Max ping autokick set to `{ping_2}` ms (Scheduled {job_2_time})")
             else:
                 logger.warning(f"Scheduled: Failed to set max ping to {ping_2}ms")
+
+        # Register async jobs properly using scheduler.add_job
+        scheduler.add_job(set_ping_job_1, CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)), id="set_ping_job_1")
+        scheduler.add_job(set_ping_job_2, CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)), id="set_ping_job_2")
 
         client.run(BOT_TOKEN)
