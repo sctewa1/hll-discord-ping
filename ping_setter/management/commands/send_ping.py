@@ -8,6 +8,9 @@ from dotenv import load_dotenv
 from django.core.management.base import BaseCommand
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
+from pytz import timezone
+from datetime import datetime
 
 
 # Load environment variables
@@ -16,6 +19,18 @@ BOT_TOKEN = os.getenv('DISCORD_TOKEN')
 CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
 API_BASE_URL = os.getenv('API_BASE_URL')
 API_BEARER_TOKEN = os.getenv('API_BEARER_TOKEN')
+
+# Retrieve timezone from .env file
+tz_name = os.getenv('TIMEZONE', 'Australia/Sydney')
+
+# Initialize scheduler with the specified timezone
+scheduler = AsyncIOScheduler(timezone=timezone(tz_name))
+
+# Retrieve job times and ping values from .env file
+job_1_time = os.getenv('SCHEDULED_JOB_1_TIME', '00:01')
+job_2_time = os.getenv('SCHEDULED_JOB_2_TIME', '15:00')
+ping_1 = int(os.getenv('SCHEDULED_JOB_1_PING', 500))
+ping_2 = int(os.getenv('SCHEDULED_JOB_2_PING', 320))
 
 # Logging
 logging.basicConfig(filename='logs/discord_bot.log', level=logging.INFO)
@@ -181,23 +196,28 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # Scheduled ping update tasks
         @scheduler.scheduled_job(CronTrigger(hour=0, minute=1))
-        async def set_ping_to_500():
-            if set_max_ping_autokick(500):
-                logger.info("Scheduled: Set max ping to 500ms 🕐 (00:01)")
+        # Parse job times from env vars
+        job_1_hour, job_1_minute = map(int, job_1_time.strip('"').split(":"))
+        job_2_hour, job_2_minute = map(int, job_2_time.strip('"').split(":"))
+        
+        @scheduler.scheduled_job(CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)))
+        async def set_ping_job_1():
+            if set_max_ping_autokick(ping_1):
+                logger.info(f"Scheduled: Set max ping to {ping_1}ms 🕐 ({job_1_time})")
                 channel = client.get_channel(CHANNEL_ID)
                 if channel:
-                    await channel.send("🕐 Max ping autokick set to `500` ms (Scheduled 00:01)")
+                    await channel.send(f"🕐 Max ping autokick set to `{ping_1}` ms (Scheduled {job_1_time})")
             else:
-                logger.warning("Scheduled: Failed to set max ping to 500ms")
-
-        @scheduler.scheduled_job(CronTrigger(hour=15, minute=0))
-        async def set_ping_to_320():
-            if set_max_ping_autokick(320):
-                logger.info("Scheduled: Set max ping to 320ms 🕒 (15:00)")
+                logger.warning(f"Scheduled: Failed to set max ping to {ping_1}ms")
+        
+        @scheduler.scheduled_job(CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)))
+        async def set_ping_job_2():
+            if set_max_ping_autokick(ping_2):
+                logger.info(f"Scheduled: Set max ping to {ping_2}ms 🕒 ({job_2_time})")
                 channel = client.get_channel(CHANNEL_ID)
                 if channel:
-                    await channel.send("🕒 Max ping autokick set to `320` ms (Scheduled 15:00)")
+                    await channel.send(f"🕒 Max ping autokick set to `{ping_2}` ms (Scheduled {job_2_time})")
             else:
-                logger.warning("Scheduled: Failed to set max ping to 320ms")
+                logger.warning(f"Scheduled: Failed to set max ping to {ping_2}ms")
 
         client.run(BOT_TOKEN)
