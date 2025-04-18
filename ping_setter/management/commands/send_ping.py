@@ -11,6 +11,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from pytz import timezone
 from datetime import datetime
+from dotenv import set_key
 
 
 # Load environment variables
@@ -136,6 +137,50 @@ async def setping(interaction: discord.Interaction, ping: int):
         await interaction.response.send_message(f"✅ Max ping autokick set to `{ping}` ms.")
     else:
         await interaction.response.send_message("⚠️ Failed to set max ping autokick.")
+@tree.command(name="setScheduledTime", description="Set the scheduled job times and ping values")
+@app_commands.describe(job="Job number (1 or 2)", time="New job time (hh:mm)", ping="New ping value in ms")
+async def set_scheduled_time(interaction: discord.Interaction, job: int, time: str, ping: int):
+    if job == 1:
+        try:
+            job_1_hour, job_1_minute = map(int, time.split(":"))
+            if not (0 <= job_1_hour < 24 and 0 <= job_1_minute < 60):
+                await interaction.response.send_message("⚠️ Invalid time format. Please use hh:mm format.")
+                return
+
+            # Update the .env file with new time and ping
+            set_key(".env", "SCHEDULED_JOB_1_TIME", time)
+            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))
+
+            # Reload the .env file
+            load_dotenv()
+
+            await interaction.response.send_message(f"✅ Job 1 time updated to `{time}` and ping to `{ping}` ms.")
+
+        except Exception as e:
+            await interaction.response.send_message(f"⚠️ Error: {e}")
+
+    elif job == 2:
+        try:
+            job_2_hour, job_2_minute = map(int, time.split(":"))
+            if not (0 <= job_2_hour < 24 and 0 <= job_2_minute < 60):
+                await interaction.response.send_message("⚠️ Invalid time format. Please use hh:mm format.")
+                return
+
+            # Update the .env file with new time and ping
+            set_key(".env", "SCHEDULED_JOB_2_TIME", time)
+            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))
+
+            # Reload the .env file
+            load_dotenv()
+
+            await interaction.response.send_message(f"✅ Job 2 time updated to `{time}` and ping to `{ping}` ms.")
+
+        except Exception as e:
+            await interaction.response.send_message(f"⚠️ Error: {e}")
+
+    else:
+        await interaction.response.send_message("⚠️ Invalid job number. Please choose 1 or 2.")
+
 
 @tree.command(name="bans", description="List last 5 bans")
 async def bans(interaction: discord.Interaction):
