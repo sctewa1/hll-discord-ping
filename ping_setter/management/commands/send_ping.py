@@ -134,10 +134,25 @@ async def curping(interaction: discord.Interaction):
 @tree.command(name="setping", description="Set new max ping kick value")
 @app_commands.describe(ping="The new max ping value (in ms)")
 async def setping(interaction: discord.Interaction, ping: int):
+    username = interaction.user.name  # Get the Discord username of the user who triggered the command
+    
+    # Log the attempt to set the ping
+    logger.info(f"User `{username}` is attempting to set max ping autokick to `{ping}` ms.")
+
+    # Check if the ping value is within a reasonable range (you can adjust this range as needed)
+    if ping <= 0 or ping > 10000:
+        await interaction.response.send_message("⚠️ Invalid ping value. Please provide a value between 1 and 10,000 ms.")
+        logger.warning(f"User `{username}` provided an invalid ping value: `{ping}` ms (must be between 1 and 10,000 ms).")
+        return
+    
+    # Attempt to set the max ping
     if set_max_ping_autokick(ping):
         await interaction.response.send_message(f"✅ Max ping autokick set to `{ping}` ms.")
+        logger.info(f"User `{username}` successfully set max ping autokick to `{ping}` ms.")
     else:
         await interaction.response.send_message("⚠️ Failed to set max ping autokick.")
+        logger.error(f"User `{username}` failed to set max ping autokick to `{ping}` ms.")
+        
 
 @tree.command(name="curscheduledtime", description="Show the current scheduled job times and ping values")
 async def cur_scheduled_time(interaction: discord.Interaction):
@@ -171,7 +186,7 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
 
             # Update the .env file with new time and ping
             set_key(".env", "SCHEDULED_JOB_1_TIME", time)
-            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))
+            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))  # Ensure ping is saved as a string (no quotes in the file)
 
             # Reload the .env file
             load_dotenv()
@@ -193,7 +208,7 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
 
             # Update the .env file with new time and ping
             set_key(".env", "SCHEDULED_JOB_2_TIME", time)
-            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))
+            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))  # Ensure ping is saved as a string (no quotes in the file)
 
             # Reload the .env file
             load_dotenv()
@@ -208,7 +223,6 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
 
     else:
         await interaction.response.send_message("⚠️ Invalid job number. Please choose 1 or 2.")
-
 
 @tree.command(name="bans", description="List last 5 bans")
 async def bans(interaction: discord.Interaction):
@@ -230,26 +244,24 @@ async def unban(interaction: discord.Interaction, index: int):
     data = get_recent_bans()
     if not data:
         await interaction.response.send_message("⚠️ No bans to unban.")
+        logger.info(f"User `{interaction.user.name}` attempted to unban a player, but no bans were found.")
         return
 
     if 1 <= index <= len(data):
         player_id = data[index - 1]["player_id"]
-        if unban_player(player_id):
-            name = get_player_name(player_id)
+        name = get_player_name(player_id)
+        success = unban_player(player_id)
+
+        if success:
             await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
+            logger.info(f"User `{interaction.user.name}` successfully unbanned player `{name}` (ID: `{player_id}`)")
         else:
             await interaction.response.send_message("❌ Failed to unban player.")
+            logger.error(f"User `{interaction.user.name}` failed to unban player `{name}` (ID: `{player_id}`).")
     else:
         await interaction.response.send_message("⚠️ Invalid ban index.")
-
-@tree.command(name="online", description="Check if bot is online and API is reachable")
-async def online(interaction: discord.Interaction):
-    ping = get_max_ping_autokick()
-    if ping is not None:
-        await interaction.response.send_message("✅ Bot is online and API is reachable.")
-    else:
-        await interaction.response.send_message("⚠️ Bot is online but failed to reach API.")
-
+        logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
+        
 @tree.command(name="help", description="Show help message")
 async def help_command(interaction: discord.Interaction):
     msg = (
