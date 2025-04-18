@@ -104,6 +104,8 @@ def unban_player(player_id: str) -> bool:
         return False
 
 def reschedule_job(job_id: str, time_str: str, ping: int):
+    logger.error(f"RESCHEDULE_JOB CALLED - job_id: {job_id}, time_str: '{time_str}', type(time_str): {type(time_str)}, ping: {ping}, type(ping): {type(ping)}")
+    logger.error(f"RESCHEDULE_JOB - time_str before parsing: '{time_str}'")
     hour = int(time_str[:2])
     minute = int(time_str[2:])
     trigger = CronTrigger(hour=hour, minute=minute, timezone=timezone(tz_name))
