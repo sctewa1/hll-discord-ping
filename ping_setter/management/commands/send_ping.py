@@ -251,6 +251,8 @@ async def help_command(interaction: discord.Interaction):
         "/unban - Unban a player from recent bans\n"
         "/curping - Show current max ping kick\n"
         "/setping - Set max ping kick\n"
+        "/curscheduledtime - there are 2 jobs to set the ping, see the times\n"
+        "/setScheduledTime job=1 time=00:01 ping=500 - use this to set the time and ping\n"
         "/online - Check if bot and API are running\n"
         "/help - Show this help message"
     )
