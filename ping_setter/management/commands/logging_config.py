@@ -8,15 +8,14 @@ from datetime import datetime, timedelta
 # Load environment variables from .env file
 load_dotenv()
 
-# Get timezone from .env
+# Get some items from .env
 TIMEZONE = os.getenv('TIMEZONE', 'UTC')  # Default to UTC if no timezone is set
+LOG_DIR = os.getenv("LOG_DIR", "/logs")  # default to /logs if not set
 
 def setup_logging():
-    log_directory = '/logs'
-    if not os.path.exists(log_directory):
-        os.makedirs(log_directory)
-
-    log_filename = os.path.join(log_directory, 'discord_bot.log')
+    if not os.path.exists(LOG_DIR):
+        os.makedirs(LOG_DIR)
+    log_filename = os.path.join(LOG_DIR, "discord_bot.log")
 
     # Get the timezone object
     local_tz = timezone(TIMEZONE)
