@@ -58,7 +58,7 @@ def set_max_ping_autokick(ping: int) -> bool:
         response = requests.post(
             f"{API_BASE_URL}/api/set_max_ping_autokick",
             headers=HEADERS,
-            json={"max_ms": ping}
+            json={"max_ms": ping}  # 'ping' here is an integer
         )
         return response.ok
     except Exception as e:
@@ -223,16 +223,16 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
 
     try:
         if job == 1:
-            set_key(".env", "SCHEDULED_JOB_1_TIME", time)  # Write time as plain string
-            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))  # Write ping as string!
+            set_key(".env", "SCHEDULED_JOB_1_TIME", time)  # Write time as string
+            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))  # Write ping as string
             logger.info(f"CALLING RESCHEDULE_JOB FOR JOB 1 - time: '{time}', ping: {ping}")
             reschedule_job("set_ping_job_1", time, ping)
             logger.info(f"User `{username}` updated Job 1: Time set to `{time[:2]}:{time[2:]}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
 
         elif job == 2:
-            set_key(".env", "SCHEDULED_JOB_2_TIME", time)  # Write time as plain string
-            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))  # Write ping as string!
+            set_key(".env", "SCHEDULED_JOB_2_TIME", time)  # Write time as string
+            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))  # Write ping as string
             reschedule_job("set_ping_job_2", time, ping)
             logger.info(f"User `{username}` updated Job 2: Time set to `{time[:2]}:{time[2:]}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
