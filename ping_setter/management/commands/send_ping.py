@@ -160,6 +160,8 @@ async def cur_scheduled_time(interaction: discord.Interaction):
 @tree.command(name="setscheduledtime", description="Set the scheduled job times and ping values")
 @app_commands.describe(job="Job number (1 or 2)", time="New job time (hh:mm)", ping="New ping value in ms")
 async def set_scheduled_time(interaction: discord.Interaction, job: int, time: str, ping: int):
+    username = interaction.user.name  # Get the Discord username of the user who triggered the command
+
     if job == 1:
         try:
             job_1_hour, job_1_minute = map(int, time.split(":"))
@@ -173,6 +175,9 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
 
             # Reload the .env file
             load_dotenv()
+
+            # Log the change with the username
+            logger.info(f"User `{username}` updated Job 1: Time set to `{time}` and Ping set to `{ping}` ms.")
 
             await interaction.response.send_message(f"✅ Job 1 time updated to `{time}` and ping to `{ping}` ms.")
 
@@ -192,6 +197,9 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
 
             # Reload the .env file
             load_dotenv()
+
+            # Log the change with the username
+            logger.info(f"User `{username}` updated Job 2: Time set to `{time}` and Ping set to `{ping}` ms.")
 
             await interaction.response.send_message(f"✅ Job 2 time updated to `{time}` and ping to `{ping}` ms.")
 
