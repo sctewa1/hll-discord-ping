@@ -12,6 +12,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from pytz import timezone
 from datetime import datetime
 from dotenv import set_key
+from logging_config import setup_logging
 
 
 # Load environment variables
@@ -34,8 +35,8 @@ ping_1 = int(os.getenv('SCHEDULED_JOB_1_PING', 500))
 ping_2 = int(os.getenv('SCHEDULED_JOB_2_PING', 320))
 
 # Logging
-logging.basicConfig(filename='logs/discord_bot.log', level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = setup_logging()
+logger.info('Bot has started')
 
 # Discord bot setup
 intents = discord.Intents.default()
@@ -252,7 +253,7 @@ async def help_command(interaction: discord.Interaction):
         "/curping - Show current max ping kick\n"
         "/setping - Set max ping kick\n"
         "/curscheduledtime - there are 2 jobs to set the ping, see the times\n"
-        "/setScheduledTime job=1 time=00:01 ping=500 - use this to set the time and ping\n"
+        "/setscheduledtime job=1 time=00:01 ping=500 - use this to set the time and ping\n"
         "/online - Check if bot and API are running\n"
         "/help - Show this help message"
     )
