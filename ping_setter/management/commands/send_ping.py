@@ -104,7 +104,7 @@ def unban_player(player_id: str) -> bool:
         return False
 
 def reschedule_job(job_id: str, time_str: str, ping: int):
-    hour, minute = map(int, time_str.strip('"').split(":"))
+    hour, minute = map(int, time_str.split(":"))
     trigger = CronTrigger(hour=hour, minute=minute, timezone=timezone(tz_name))
 
     async def scheduled_job(current_time_str, current_ping):
@@ -215,14 +215,14 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
     try:
         if job == 1:
             set_key(".env", "SCHEDULED_JOB_1_TIME", time)
-            set_key(".env", "SCHEDULED_JOB_1_PING", ping)  # Pass 'ping' directly (it's already an int)
+            set_key(".env", "SCHEDULED_JOB_1_PING", ping)
             reschedule_job("set_ping_job_1", time, ping)
             logger.info(f"User `{username}` updated Job 1: Time set to `{time}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time}` with ping `{ping}` ms.")
 
         elif job == 2:
             set_key(".env", "SCHEDULED_JOB_2_TIME", time)
-            set_key(".env", "SCHEDULED_JOB_2_PING", ping)  # Pass 'ping' directly (it's already an int)
+            set_key(".env", "SCHEDULED_JOB_2_PING", ping)
             reschedule_job("set_ping_job_2", time, ping)
             logger.info(f"User `{username}` updated Job 2: Time set to `{time}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time}` with ping `{ping}` ms.")
@@ -299,8 +299,8 @@ class Command(BaseCommand):
         ping_1_initial = int(os.getenv('SCHEDULED_JOB_1_PING', 500))
         ping_2_initial = int(os.getenv('SCHEDULED_JOB_2_PING', 320))
 
-        job_1_hour, job_1_minute = map(int, job_1_time_initial.strip('"').split(":"))
-        job_2_hour, job_2_minute = map(int, job_2_time_initial.strip('"').split(":"))
+        job_1_hour, job_1_minute = map(int, job_1_time_initial.split(":"))
+        job_2_hour, job_2_minute = map(int, job_2_time_initial.split(":"))
 
         async def set_ping_job_1(current_time_str, current_ping):
             if set_max_ping_autokick(current_ping):
@@ -320,7 +320,7 @@ class Command(BaseCommand):
             else:
                 logger.warning(f"Scheduled: Failed to set max ping to {current_ping}ms")
 
-        # Register async jobs properly using scheduler.add_job
+       # Register async jobs properly using scheduler.add_job
         scheduler.add_job(set_ping_job_1, CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)), id="set_ping_job_1", args=[job_1_time_initial, ping_1_initial])
         scheduler.add_job(set_ping_job_2, CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)), id="set_ping_job_2", args=[job_2_time_initial, ping_2_initial])
 
