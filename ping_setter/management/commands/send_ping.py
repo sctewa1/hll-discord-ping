@@ -12,7 +12,7 @@ from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from pytz import timezone
 from datetime import datetime
 from dotenv import set_key
-from logging_config import setup_logging
+from .logging_config import setup_logging
 
 
 # Load environment variables
