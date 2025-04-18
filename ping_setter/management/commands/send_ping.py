@@ -170,4 +170,22 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
         logger.error(f"Error updating schedule for Job {job}: {e}")
         await interaction.response.send_message(f"❌ Error updating schedule: {e}")
 
-# ... rest of the file unchanged ...
+# Management command entrypoint
+class Command(BaseCommand):
+    help = 'Starts the Discord ping setter bot'
+
+    def handle(self, *args, **kwargs):
+        scheduler.start()
+
+        async def start_bot():
+            @client.event
+            async def on_ready():
+                await tree.sync()
+                logger.info(f"Bot is ready. Logged in as {client.user}")
+                reschedule_job("set_ping_job_1", job_1_time, ping_1)
+                reschedule_job("set_ping_job_2", job_2_time, ping_2)
+
+            await client.start(BOT_TOKEN)
+
+        import asyncio
+        asyncio.run(start_bot())
