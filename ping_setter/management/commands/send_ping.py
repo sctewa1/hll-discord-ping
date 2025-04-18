@@ -151,7 +151,11 @@ async def set_ping_job_2():
 
 @client.event
 async def on_ready():
-    await tree.sync()
+    GUILD_ID = 1318878021335388255  # Replace with your actual server ID as an integer
+    guild = discord.Object(id=GUILD_ID)
+    
+    # Sync commands to this guild specifically for quicker updates
+    await tree.sync(guild=guild)
     logger.info("🔔 Bot has started and is now online!")
     print("🔔 Bot has started and is now online!")
 
