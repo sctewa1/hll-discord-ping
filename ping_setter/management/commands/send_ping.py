@@ -232,21 +232,21 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
             await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
 
         elif job == 2:
-            logger.critical(f"ENTERING JOB 2 BLOCK - job: {job}, time: '{time}', ping: {ping}")
-            try:
-                logger.error(f"ATTEMPTING TO SET SCHEDULED_JOB_2_TIME in .env to: '{time}'")
-                set_key(".env", "SCHEDULED_JOB_2_TIME", time)  # Write time as plain string
-                logger.error(f"SET SCHEDULED_JOB_2_TIME in .env")
-                logger.error(f"ATTEMPTING TO SET SCHEDULED_JOB_2_PING in .env to: {ping}")
-                set_key(".env", "SCHEDULED_JOB_2_PING", ping)  # Write ping as integer
-                logger.error(f"SET SCHEDULED_JOB_2_PING in .env")
-                logger.error(f"ATTEMPTING TO CALL RESCHEDULE_JOB FOR JOB 2 - time: '{time}', ping: {ping}")
-                reschedule_job("set_ping_job_2", time, ping)
-                logger.info(f"User `{username}` updated Job 2: Time set to `{time[:2]}:{time[2:]}` and Ping set to `{ping}` ms.")
-                await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
-            except Exception as e:
-                logger.critical(f"CRITICAL ERROR WITHIN JOB 2 UPDATE BLOCK: {e}")
-                await interaction.response.send_message(f"❌ CRITICAL ERROR updating Job 2 schedule: {e}")
+        logger.critical(f"ENTERING JOB 2 BLOCK - job: {job}, time: '{time}', ping: {ping}, type(ping): {type(ping)}")
+        try:
+            logger.error(f"ATTEMPTING TO SET SCHEDULED_JOB_2_TIME in .env to: '{time}'")
+            set_key(".env", "SCHEDULED_JOB_2_TIME", time)  # Write time as plain string
+            logger.error(f"SET SCHEDULED_JOB_2_TIME in .env")
+            logger.error(f"ATTEMPTING TO SET SCHEDULED_JOB_2_PING in .env to: {ping}")
+            set_key(".env", "SCHEDULED_JOB_2_PING", ping)  # Write ping as integer
+            logger.error(f"SET SCHEDULED_JOB_2_PING in .env")
+            logger.error(f"ATTEMPTING TO CALL RESCHEDULE_JOB FOR JOB 2 - time: '{time}', ping: {ping}")
+            reschedule_job("set_ping_job_2", time, ping)
+            logger.info(f"User `{username}` updated Job 2: Time set to `{time[:2]}:{time[2:]}` and Ping set to `{ping}` ms.")
+            await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
+        except Exception as e:
+            logger.critical(f"CRITICAL ERROR WITHIN JOB 2 UPDATE BLOCK: {e}")
+            await interaction.response.send_message(f"❌ CRITICAL ERROR updating Job 2 schedule: {e}")
 
     except Exception as e:
         logger.error(f"Error updating schedule for Job {job}: {e}")
