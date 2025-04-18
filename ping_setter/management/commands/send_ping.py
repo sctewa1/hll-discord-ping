@@ -14,42 +14,25 @@ from .logging_config import setup_logging
 
 # Load environment variables
 load_dotenv()
-BOT_TOKEN = os.getenv('DISCORD_TOKEN')
-CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
-API_BASE_URL = os.getenv('API_BASE_URL')
-API_BEARER_TOKEN = os.getenv('API_BEARER_TOKEN')
-
-# Retrieve timezone from .env file
-tz_name = os.getenv('TIMEZONE', 'Australia/Sydney')
-
-# Initialize scheduler with the specified timezone
-scheduler = AsyncIOScheduler(timezone=timezone(tz_name))
-
-# Retrieve job times and ping values from .env file
-job_1_time = os.getenv('SCHEDULED_JOB_1_TIME', '00:01')
-job_2_time = os.getenv('SCHEDULED_JOB_2_TIME', '15:00')
-ping_1 = int(os.getenv('SCHEDULED_JOB_1_PING', 500))
-ping_2 = int(os.getenv('SCHEDULED_JOB_2_PING', 320))
-
-# Parse job times
-job_1_hour, job_1_minute = map(int, job_1_time.strip('"').split(":"))
-job_2_hour, job_2_minute = map(int, job_2_time.strip('"').split(":"))
-
-# Logging
-logger = setup_logging()
-logger.info('Bot has started')
 
 # Discord bot setup
 intents = discord.Intents.default()
 client = commands.Bot(command_prefix="!", intents=intents)
 tree = client.tree
 
-# Helper for API calls
-HEADERS = {"Authorization": f"Bearer {API_BEARER_TOKEN}", "Content-Type": "application/json"}
+# Scheduler and headers
+scheduler = AsyncIOScheduler()
+HEADERS = {}
+
+# Globals initialized later
+logger = None
+BOT_TOKEN = None
+CHANNEL_ID = None
+API_BASE_URL = None
+API_BEARER_TOKEN = None
+tz_name = None
 
 # API helper functions
-# (unchanged get_max_ping_autokick, set_max_ping_autokick, get_recent_bans, get_player_name, unban_player)
-
 def get_max_ping_autokick() -> int | None:
     try:
         resp = requests.get(f"{API_BASE_URL}/api/get_server_settings", headers=HEADERS)
@@ -58,7 +41,6 @@ def get_max_ping_autokick() -> int | None:
     except Exception as e:
         logger.error(f"Failed to fetch max ping: {e}")
         return None
-
 
 def set_max_ping_autokick(ping: int) -> bool:
     try:
@@ -72,7 +54,6 @@ def set_max_ping_autokick(ping: int) -> bool:
         logger.error(f"Failed to set max ping: {e}")
         return False
 
-
 def get_recent_bans(limit=5):
     try:
         resp = requests.get(f"{API_BASE_URL}/api/get_bans", headers=HEADERS)
@@ -83,7 +64,6 @@ def get_recent_bans(limit=5):
     except Exception as e:
         logger.error(f"Failed to fetch bans: {e}")
         return []
-
 
 def get_player_name(player_id: str) -> str:
     try:
@@ -103,7 +83,6 @@ def get_player_name(player_id: str) -> str:
         logger.error(f"Failed to fetch player profile: {e}")
         return "Unknown"
 
-
 def unban_player(player_id: str) -> bool:
     try:
         resp = requests.post(f"{API_BASE_URL}/api/unban", headers=HEADERS, json={"player_id": player_id})
@@ -111,7 +90,6 @@ def unban_player(player_id: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to unban player: {e}")
         return False
-
 
 def reschedule_job(job_id: str, time_str: str, ping: int):
     hour, minute = map(int, time_str.strip('"').split(":"))
@@ -133,14 +111,11 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
 
     scheduler.add_job(job, trigger=trigger, id=job_id)
 
-# Slash commands definitions\...
-
 @tree.command(name="setscheduledtime", description="Set the scheduled job times and ping values")
 @app_commands.describe(job="Job number (1 or 2)", time="New job time (hh:mm)", ping="New ping value in ms")
 async def set_scheduled_time(interaction: discord.Interaction, job: int, time: str, ping: int):
     username = interaction.user.name
 
-    # Validate time format
     try:
         hour, minute = map(int, time.split(":"))
         if not (0 <= hour < 24 and 0 <= minute < 60):
@@ -152,7 +127,6 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
 
     try:
         if job == 1:
-            # Write raw time (auto-quoted) and integer ping
             set_key(".env", "SCHEDULED_JOB_1_TIME", time)
             set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))
             reschedule_job("set_ping_job_1", time, ping)
@@ -170,11 +144,29 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
         logger.error(f"Error updating schedule for Job {job}: {e}")
         await interaction.response.send_message(f"❌ Error updating schedule: {e}")
 
-# Management command entrypoint
 class Command(BaseCommand):
     help = 'Starts the Discord ping setter bot'
 
     def handle(self, *args, **kwargs):
+        global logger, BOT_TOKEN, CHANNEL_ID, API_BASE_URL, API_BEARER_TOKEN, tz_name, HEADERS
+
+        logger = setup_logging()
+        logger.info('Starting bot setup')
+
+        BOT_TOKEN = os.getenv('DISCORD_TOKEN')
+        CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
+        API_BASE_URL = os.getenv('API_BASE_URL')
+        API_BEARER_TOKEN = os.getenv('API_BEARER_TOKEN')
+        tz_name = os.getenv('TIMEZONE', 'Australia/Sydney')
+
+        HEADERS = {"Authorization": f"Bearer {API_BEARER_TOKEN}", "Content-Type": "application/json"}
+
+        job_1_time = os.getenv('SCHEDULED_JOB_1_TIME', '00:01')
+        job_2_time = os.getenv('SCHEDULED_JOB_2_TIME', '15:00')
+        ping_1 = int(os.getenv('SCHEDULED_JOB_1_PING', 500))
+        ping_2 = int(os.getenv('SCHEDULED_JOB_2_PING', 320))
+
+        scheduler.configure(timezone=timezone(tz_name))
         scheduler.start()
 
         async def start_bot():
