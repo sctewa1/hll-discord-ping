@@ -282,8 +282,12 @@ class Command(BaseCommand):
     help = "Starts the Discord Ping Bot"
 
     def handle(self, *args, **options):
-        asyncio.run(self.start_bot())
-
-    async def start_bot(self):
-        await tree.sync()
+        @client.event
+        async def on_ready():
+            try:
+                await tree.sync()
+                logger.info(f"Synced slash commands as {client.user} (ID: {client.user.id})")
+            except Exception as e:
+                logger.error(f"Failed to sync commands: {e}")
+        
         client.run(DISCORD_TOKEN)
