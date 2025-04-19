@@ -238,16 +238,33 @@ class Command(BaseCommand):
     help = "Starts the Discord bot"
 
     def handle(self, *args, **options):
-        job_1_time_initial = os.getenv("PING_JOB_1_TIME", "12:00")
-        job_2_time_initial = os.getenv("PING_JOB_2_TIME", "15:00")
+        job_1_time_initial = os.getenv("SCHEDULED_JOB_1_TIME", "0009")  # Default to '0009' (HHMM format)
+        job_2_time_initial = os.getenv("SCHEDULED_JOB_2_TIME", "1500")  # Default to '1500' (HHMM format)
 
-        job_1_hour, job_1_minute = map(int, job_1_time_initial.split(":"))
-        job_2_hour, job_2_minute = map(int, job_2_time_initial.split(":"))
+        # Slice the time strings into hours and minutes directly (since no colon is present)
+        job_1_hour, job_1_minute = int(job_1_time_initial[:2]), int(job_1_time_initial[2:])
+        job_2_hour, job_2_minute = int(job_2_time_initial[:2]), int(job_2_time_initial[2:])
 
-        ping_1 = int(os.getenv("PING_JOB_1_PING", 100))
-        ping_2 = int(os.getenv("PING_JOB_2_PING", 150))
+        ping_1_initial = int(os.getenv("SCHEDULED_JOB_1_PING", 500))  # Default ping value for job 1
+        ping_2_initial = int(os.getenv("SCHEDULED_JOB_2_PING", 320))  # Default ping value for job 2
 
-        reschedule_job("set_ping_job_1", job_1_time_initial, ping_1)
-        reschedule_job("set_ping_job_2", job_2_time_initial, ping_2)
+        # Register async jobs properly using scheduler.add_job
+        scheduler.add_job(
+            scheduled_ping_job, 
+            CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)),
+            id="set_ping_job_1", 
+            args=["set_ping_job_1", job_1_time_initial, ping_1_initial]
+        )
+        
+        scheduler.add_job(
+            scheduled_ping_job, 
+            CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)),
+            id="set_ping_job_2", 
+            args=["set_ping_job_2", job_2_time_initial, ping_2_initial]
+        )
+
+        # Reschedule jobs
+        reschedule_job("set_ping_job_1", job_1_time_initial, ping_1_initial)
+        reschedule_job("set_ping_job_2", job_2_time_initial, ping_2_initial)
 
         client.run(BOT_TOKEN)
