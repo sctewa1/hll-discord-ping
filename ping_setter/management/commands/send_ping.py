@@ -46,9 +46,9 @@ if not DISCORD_TOKEN:
 if not CHANNEL_ID:
     raise ValueError("CHANNEL_ID is not defined in config.jsonc")
 
+# Get the timezone from config, with a fallback to "Australia/Sydney" if not found
+tz_name = config.get("TIMEZONE", "Australia/Sydney")
 
-
-# Initialize scheduler with timezone
 try:
     tz = timezone(tz_name)
 except Exception as e:
