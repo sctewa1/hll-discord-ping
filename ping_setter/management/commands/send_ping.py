@@ -170,6 +170,7 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
 # --- Slash commands ---
 @tree.command(name="curping", description="Show current max ping autokick")
 async def curping(interaction: discord.Interaction):
+    ogger.info(f"[/curping] Requested by {interaction.user} (ID: {interaction.user.id})")
     ping = get_max_ping_autokick()
     if ping is not None:
         await interaction.response.send_message(f"📡 Current max ping autokick is `{ping}` ms.")
@@ -179,6 +180,7 @@ async def curping(interaction: discord.Interaction):
 @tree.command(name="setping", description="Set max ping autokick")
 @app_commands.describe(ping="Ping in ms")
 async def setping(interaction: discord.Interaction, ping: int):
+    logger.info(f"[/setping] Requested by {interaction.user} (ID: {interaction.user.id}) with ping {ping}")
     if ping <= 0 or ping > 10000:
         return await interaction.response.send_message("⚠️ Ping must be between 1 and 10000 ms.")
     if set_max_ping_autokick(ping):
@@ -188,6 +190,7 @@ async def setping(interaction: discord.Interaction, ping: int):
 
 @tree.command(name="curscheduledtime", description="Show scheduled jobs and pings")
 async def curscheduledtime(interaction: discord.Interaction):
+    logger.info(f"[/curscheduledtime] Requested by {interaction.user} (ID: {interaction.user.id})")
     t1, p1 = config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING")
     t2, p2 = config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING")
     msg = (f"🕒 Job 1: {t1[:2]}:{t1[2:]} @ {p1}ms\n"
@@ -197,6 +200,7 @@ async def curscheduledtime(interaction: discord.Interaction):
 @tree.command(name="setscheduledtime", description="Set scheduled job time and ping")
 @app_commands.describe(job="Job number (1 or 2)", time="Time HHMM", ping="Ping in ms")
 async def setscheduledtime(interaction: discord.Interaction, job: int, time: str, ping: int):
+    logger.info(f"[/setscheduledtime] Requested by {interaction.user} (ID: {interaction.user.id}) - Job {job}, Time {time}, Ping {ping}")
     if not time.isdigit() or len(time) != 4:
         return await interaction.response.send_message("⚠️ Invalid time format. Use HHMM.")
     hour, minute = int(time[:2]), int(time[2:])
@@ -213,6 +217,7 @@ async def setscheduledtime(interaction: discord.Interaction, job: int, time: str
 
 @tree.command(name="bans", description="Show last 5 temp bans")
 async def bans(interaction: discord.Interaction):
+    logger.info(f"[/bans] Requested by {interaction.user} (ID: {interaction.user.id})")
     data = get_recent_bans()
     if not data:
         return await interaction.response.send_message("⚠️ No bans found.")
@@ -222,6 +227,7 @@ async def bans(interaction: discord.Interaction):
 @tree.command(name="unban", description="Unban player by ban index")
 @app_commands.describe(index="1-5")
 async def unban(interaction: discord.Interaction, index: int):
+    logger.info(f"[/unban] Requested by {interaction.user} (ID: {interaction.user.id}) - Index {index}")
     data = get_recent_bans()
     if not (1 <= index <= len(data)):
         return await interaction.response.send_message("⚠️ Invalid ban index.")
@@ -233,28 +239,29 @@ async def unban(interaction: discord.Interaction, index: int):
 
 @tree.command(name="online", description="Check if bot and API are running")
 async def online(interaction: discord.Interaction):
+    logger.info(f"[/online] Requested by {interaction.user} (ID: {interaction.user.id})")
     ping = get_max_ping_autokick()
     if ping is not None:
         await interaction.response.send_message(f"🟢 Bot and API are online! Current max ping autokick: `{ping}` ms.")
     else:
         await interaction.response.send_message("🟢 Bot is online, but failed to reach API.")
 
-@tree.command(name="help", description="Show this help message")
 async def help_command(interaction: discord.Interaction):
+    logger.info(f"[/help] Requested by {interaction.user} (ID: {interaction.user.id})")
     msg = (
-    "📘 **Getting Started:**\n"
-    "Welcome to the HLL command tool!\n"
-    "📜 **List of Commands:**\n"
-    "/bans - Show recent bans\n"
-    "/unban - Unban a player from recent bans\n"
-    "/curping - Show current max ping autokick value\n"
-    "/setping - Set max ping autokick value (in ms)\n"
-    "/curscheduledtime - Show the current scheduled job times and ping values\n"
-    "/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
-    "/online - Check if bot and API are running\n"
-    "/help - Show this help message"
+        "📘 **Getting Started:**\n"
+        "Welcome to the HLL command tool!\n\n"
+        "📜 **List of Commands:**\n"
+        "/bans - Show recent bans\n"
+        "/unban - Unban a player from recent bans\n"
+        "/curping - Show current max ping autokick value\n"
+        "/setping - Set max ping autokick value (in ms)\n"
+        "/curscheduledtime - Show current scheduled job times and ping values\n"
+        "/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
+        "/online - Check if bot and API are running\n"
+        "/help - Show this help message"
     )
-
+    await interaction.response.send_message(msg)
 
 # --- Bot startup ---
 @client.event
