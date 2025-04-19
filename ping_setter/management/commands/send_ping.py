@@ -159,12 +159,21 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
             args=[job_id, time_str, ping],
             replace_existing=True
         )
-        config[f"{job_id.upper()}_TIME"] = time_str
-        config[f"{job_id.upper()}_PING"] = ping
-        # persist updated schedule
-        with open(CONFIG_PATH, "w") as f:
-            json5.dump(config, f, indent=4)
-        logger.info(f"[{job_id}] Rescheduled to {time_str} with ping {ping}")
+
+        job_config_map = {
+            "set_ping_job_1": ("SCHEDULED_JOB_1_TIME", "SCHEDULED_JOB_1_PING"),
+            "set_ping_job_2": ("SCHEDULED_JOB_2_TIME", "SCHEDULED_JOB_2_PING")
+        }
+        job_time_key, job_ping_key = job_config_map.get(job_id, (None, None))
+        if job_time_key and job_ping_key:
+            config[job_time_key] = time_str
+            config[job_ping_key] = ping
+            with open(CONFIG_PATH, "w") as f:
+                json5.dump(config, f, indent=4)
+            logger.info(f"[{job_id}] Rescheduled to {time_str} with ping {ping}")
+        else:
+            logger.warning(f"Job ID '{job_id}' is not recognized for config update")
+
     except Exception as e:
         logger.error(f"Failed to reschedule {job_id}: {e}")
 
