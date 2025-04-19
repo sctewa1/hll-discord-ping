@@ -18,7 +18,6 @@ CONFIG_PATH = "/opt/ping_setter_hll/config.jsonc"
 logger = setup_logging()
 
 # Load config from config.jsonc
-
 def load_config():
     """
     Try loading config from several known locations, falling back to defaults.
@@ -34,12 +33,10 @@ def load_config():
                 return json5.load(f)
         except FileNotFoundError:
             logger.debug(f"Config not found at: {p}")
-    logger.error(
-        "Config file not found in any of %s; using default settings.", paths
-    )
+    logger.error("Config file not found in any of the expected paths; using default settings.")
     return {
         "DISCORD_TOKEN": "",
-        "DISCORD_CHANNEL_ID": None,
+        "CHANNEL_ID": None,
         "API_BASE_URL": "",
         "API_BEARER_TOKEN": "",
         "TIMEZONE": "Australia/Sydney",
@@ -49,17 +46,16 @@ def load_config():
         "SCHEDULED_JOB_2_PING": 320,
         "LOG_DIR": "/opt/ping_setter_hll/logs"
     }
-
 # Load configuration
 config = load_config()
 
 # Required settings
 DISCORD_TOKEN    = config.get("DISCORD_TOKEN")
-CHANNEL_ID       = config.get("DISCORD_CHANNEL_ID")
+CHANNEL_ID       = config.get("CHANNEL_ID")
 API_BASE_URL     = config.get("API_BASE_URL")
 API_BEARER_TOKEN = config.get("API_BEARER_TOKEN")
 
-if not DISCORD_TOKEN or not CHANNEL_ID or not API_BASE_URL or not API_BEARER_TOKEN:
+if not DISCORD_TOKEN or CHANNEL_ID is None or not API_BASE_URL or not API_BEARER_TOKEN:
     raise ValueError("Essential configuration missing in config.jsonc")
 
 # Prepare headers for API calls
@@ -69,7 +65,6 @@ HEADERS = {
 }
 
 # Scheduler timezone
-
 tz_name = config.get("TIMEZONE", "Australia/Sydney")
 try:
     tz = timezone(tz_name)
@@ -165,7 +160,9 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
         )
         config[f"{job_id.upper()}_TIME"] = time_str
         config[f"{job_id.upper()}_PING"] = ping
-        save_config(config)
+        # persist updated schedule
+        with open(CONFIG_PATH, "w") as f:
+            json5.dump(config, f, indent=4)
         logger.info(f"[{job_id}] Rescheduled to {time_str} with ping {ping}")
     except Exception as e:
         logger.error(f"Failed to reschedule {job_id}: {e}")
