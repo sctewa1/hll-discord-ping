@@ -1,4 +1,4 @@
-import jsonc
+import json5
 import os
 import logging
 import requests
