@@ -1,3 +1,4 @@
+```python
 import json5
 import os
 import logging
@@ -21,12 +22,7 @@ def load_config():
             return json5.load(f)
     except FileNotFoundError:
         logger.error("Config file not found. Using default settings.")
-        return {
-            "SCHEDULED_JOB_1_TIME": "0009",
-            "SCHEDULED_JOB_1_PING": 500,
-            "SCHEDULED_JOB_2_TIME": "1500",
-            "SCHEDULED_JOB_2_PING": 320
-        }
+        return {}
 
 def save_config(config):
     try:
@@ -35,25 +31,31 @@ def save_config(config):
     except Exception as e:
         logger.error(f"Failed to save config: {e}")
 
-# Load config once at top
-config = load_config()
+# Load config\config = load_config()
 
+# Required settings
 DISCORD_TOKEN = config.get("DISCORD_TOKEN")
-CHANNEL_ID = config.get("CHANNEL_ID")
+CHANNEL_ID    = config.get("DISCORD_CHANNEL_ID")
+API_BASE_URL = config.get("API_BASE_URL")
+API_BEARER_TOKEN = config.get("API_BEARER_TOKEN")
 
-if not DISCORD_TOKEN:
-    raise ValueError("DISCORD_TOKEN is not defined in config.jsonc")
-if not CHANNEL_ID:
-    raise ValueError("CHANNEL_ID is not defined in config.jsonc")
+if not DISCORD_TOKEN or not CHANNEL_ID or not API_BASE_URL or not API_BEARER_TOKEN:
+    raise ValueError("Essential configuration missing in config.jsonc")
 
-# Get the timezone from config, with a fallback to "Australia/Sydney" if not found
+# Prepare API headers
+HEADERS = {
+    "Authorization": f"Bearer {API_BEARER_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+# Scheduler timezone
 tz_name = config.get("TIMEZONE", "Australia/Sydney")
-
 try:
     tz = timezone(tz_name)
-except Exception as e:
-    logger.warning(f"Invalid timezone in config: {tz_name}. Falling back to Australia/Sydney.")
+except Exception:
+    logger.warning(f"Invalid timezone '{tz_name}', defaulting to Australia/Sydney")
     tz = timezone("Australia/Sydney")
+
 scheduler = AsyncIOScheduler(timezone=tz)
 
 # Discord bot setup
@@ -61,50 +63,50 @@ intents = discord.Intents.default()
 client = commands.Bot(command_prefix="!", intents=intents)
 tree = client.tree
 
-# API helper functions (same as in your original code)
+# --- API helper functions ---
 def get_max_ping_autokick() -> int | None:
     try:
-        response = requests.get(f"{API_BASE_URL}/api/get_server_settings", headers=HEADERS)
-        response.raise_for_status()
-        return response.json().get("result", {}).get("max_ping_autokick")
+        r = requests.get(f"{API_BASE_URL}/api/get_server_settings", headers=HEADERS)
+        r.raise_for_status()
+        return r.json().get("result", {}).get("max_ping_autokick")
     except Exception as e:
         logger.error(f"Failed to fetch max ping: {e}")
         return None
 
+
 def set_max_ping_autokick(ping: int) -> bool:
     try:
-        response = requests.post(
+        r = requests.post(
             f"{API_BASE_URL}/api/set_max_ping_autokick",
             headers=HEADERS,
             json={"max_ms": ping}
         )
-        return response.ok
+        return r.ok
     except Exception as e:
         logger.error(f"Failed to set max ping: {e}")
         return False
 
+
 def get_recent_bans(limit=5):
     try:
-        response = requests.get(f"{API_BASE_URL}/api/get_bans", headers=HEADERS)
-        response.raise_for_status()
-        bans = response.json().get("result", [])
-        filtered = [b for b in bans if b.get("type") == "temp" and b.get("player_id")]
-        return list(reversed(filtered[-limit:]))
+        r = requests.get(f"{API_BASE_URL}/api/get_bans", headers=HEADERS)
+        r.raise_for_status()
+        bans = r.json().get("result", [])
+        return list(reversed([b for b in bans if b.get("type")=="temp" and b.get("player_id")])[-limit:])
     except Exception as e:
         logger.error(f"Failed to fetch bans: {e}")
         return []
 
+
 def get_player_name(player_id: str) -> str:
     try:
-        response = requests.get(
+        r = requests.get(
             f"{API_BASE_URL}/api/get_player_profile",
             headers=HEADERS,
-            params={"player_id": player_id},
+            params={"player_id": player_id}
         )
-        response.raise_for_status()
-        result = response.json().get("result", {})
-        names = result.get("names", [])
-
+        r.raise_for_status()
+        names = r.json().get("result", {}).get("names", [])
         if names:
             names.sort(key=lambda n: n.get("last_seen", ""), reverse=True)
             return names[0].get("name", "Unknown")
@@ -113,135 +115,117 @@ def get_player_name(player_id: str) -> str:
         logger.error(f"Failed to fetch player profile: {e}")
         return "Unknown"
 
+
 def unban_player(player_id: str) -> bool:
     try:
-        response = requests.post(f"{API_BASE_URL}/api/unban", headers=HEADERS, json={"player_id": player_id})
-        return response.ok
+        r = requests.post(f"{API_BASE_URL}/api/unban", headers=HEADERS, json={"player_id": player_id})
+        return r.ok
     except Exception as e:
         logger.error(f"Failed to unban player: {e}")
         return False
 
-# Global job function for setting max ping autokick
-async def scheduled_ping_job(job_id: str, current_time_str: str, current_ping: int):
-    hour_display = current_time_str[:2]
-    minute_display = current_time_str[2:]
-    if set_max_ping_autokick(current_ping):
-        logger.info(f"[{job_id}] Set max ping to {current_ping}ms ⏰ ({hour_display}:{minute_display})")
-        channel = client.get_channel(CHANNEL_ID)
-        if channel:
-            await channel.send(f"🔄 [{job_id}] Max ping autokick set to `{current_ping}` ms (Updated schedule: {hour_display}:{minute_display})")
+# --- Scheduled job function ---
+async def scheduled_ping_job(job_id: str, time_str: str, ping: int):
+    h, m = time_str[:2], time_str[2:]
+    if set_max_ping_autokick(ping):
+        logger.info(f"[{job_id}] Set max ping to {ping}ms at {h}:{m}")
+        ch = client.get_channel(CHANNEL_ID)
+        if ch:
+            await ch.send(f"🔄 [{job_id}] Max ping autokick set to `{ping}` ms (Scheduled {h}:{m})")
     else:
-        logger.warning(f"[{job_id}] Failed to set max ping to {current_ping}ms")
+        logger.warning(f"[{job_id}] Failed to set max ping {ping}")
 
-# Reschedule job function
+# --- Reschedule helper ---
 def reschedule_job(job_id: str, time_str: str, ping: int):
     try:
-        hour, minute = map(int, time_str.split(":"))
-
-        # Remove old job if exists
-        try:
-            scheduler.remove_job(job_id)
-        except Exception as e:
-            logger.warning(f"[{job_id}] Tried to remove existing job: {e}")
-
-        # Schedule updated job
+        hour, minute = int(time_str[:2]), int(time_str[2:])
+        # replace existing
         scheduler.add_job(
             scheduled_ping_job,
-            trigger=CronTrigger(hour=hour, minute=minute, timezone=timezone(tz_name)),
+            trigger=CronTrigger(hour=hour, minute=minute, timezone=tz),
             id=job_id,
             args=[job_id, time_str, ping],
             replace_existing=True
         )
-
-        # Update and persist config
+        # persist
         config[f"{job_id.upper()}_TIME"] = time_str
         config[f"{job_id.upper()}_PING"] = ping
         save_config(config)
-
         logger.info(f"[{job_id}] Rescheduled to {time_str} with ping {ping}")
-
     except Exception as e:
-        logger.error(f"[{job_id}] Failed to reschedule: {e}")
+        logger.error(f"Failed to reschedule {job_id}: {e}")
 
-# Discord bot events and commands
+# --- Slash commands ---
+@tree.command(name="curping", description="Show current max ping autokick")
+async def curping(interaction: discord.Interaction):
+    ping = get_max_ping_autokick()
+    if ping is not None:
+        await interaction.response.send_message(f"📡 Current max ping autokick is `{ping}` ms.")
+    else:
+        await interaction.response.send_message("⚠️ Could not fetch current ping.")
+
+@tree.command(name="setping", description="Set max ping autokick")
+@app_commands.describe(ping="Ping in ms")
+async def setping(interaction: discord.Interaction, ping: int):
+    if ping <= 0 or ping > 10000:
+        return await interaction.response.send_message("⚠️ Ping must be between 1 and 10000 ms.")
+    if set_max_ping_autokick(ping):
+        await interaction.response.send_message(f"✅ Set max ping autokick to `{ping}` ms.")
+    else:
+        await interaction.response.send_message("❌ Failed to set ping.")
+
+@tree.command(name="curscheduledtime", description="Show scheduled jobs and pings")
+async def curscheduledtime(interaction: discord.Interaction):
+    t1, p1 = config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING")
+    t2, p2 = config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING")
+    msg = (f"🕒 Job 1: {t1[:2]}:{t1[2:]} @ {p1}ms\n"
+           f"🕒 Job 2: {t2[:2]}:{t2[2:]} @ {p2}ms")
+    await interaction.response.send_message(msg)
+
+@tree.command(name="bans", description="Show last 5 temp bans")
+async def bans(interaction: discord.Interaction):
+    data = get_recent_bans()
+    if not data:
+        return await interaction.response.send_message("⚠️ No bans found.")
+    lines = [f"`{i+1}` - {get_player_name(b['player_id'])} (ID: `{b['player_id']}`)" for i,b in enumerate(data)]
+    await interaction.response.send_message("**Last 5 Bans:**\n" + "\n".join(lines))
+
+@tree.command(name="unban", description="Unban player from last bans")
+@app_commands.describe(index="Ban index 1-5")
+async def unban(interaction: discord.Interaction, index: int):
+    data = get_recent_bans()
+    if not (1 <= index <= len(data)):
+        return await interaction.response.send_message("⚠️ Invalid ban index.")
+    pid = data[index-1]["player_id"]
+    if unban_player(pid):
+        await interaction.response.send_message(f"✅ Unbanned player ID `{pid}`.")
+    else:
+        await interaction.response.send_message("❌ Unban failed.")
+
+@tree.command(name="help", description="Show bot commands")
+async def help_command(interaction: discord.Interaction):
+    cmds = ["/curping", "/setping <ping>", "/curscheduledtime", "/setscheduledtime <job> <time> <ping>", "/bans", "/unban <index>"]
+    await interaction.response.send_message("📜 Commands:\n" + "\n".join(cmds))
+
+# --- Bot startup ---
 @client.event
 async def on_ready():
-          
-    job_1_time_initial = config["SCHEDULED_JOB_1_TIME"]
-    job_2_time_initial = config["SCHEDULED_JOB_2_TIME"]
-
-    # Slice the time strings into hours and minutes directly (since no colon is present)
-    job_1_hour, job_1_minute = int(job_1_time_initial[:2]), int(job_1_time_initial[2:])
-    job_2_hour, job_2_minute = int(job_2_time_initial[:2]), int(job_2_time_initial[2:])
-
-    ping_1_initial = config["SCHEDULED_JOB_1_PING"]
-    ping_2_initial = config["SCHEDULED_JOB_2_PING"]
-
-    # Register async jobs properly using scheduler.add_job
-    scheduler.add_job(
-        scheduled_ping_job, 
-        CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)),
-        id="set_ping_job_1", 
-        args=["set_ping_job_1", job_1_time_initial, ping_1_initial]
-    )
-    
-    scheduler.add_job(
-        scheduled_ping_job, 
-        CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)),
-        id="set_ping_job_2", 
-        args=["set_ping_job_2", job_2_time_initial, ping_2_initial]
-    )
-
-    # Start the scheduler here
+    # schedule initial jobs
+    for jid in ("set_ping_job_1", "set_ping_job_2"):
+        t = config.get(f"{jid.upper()}_TIME")
+        p = config.get(f"{jid.upper()}_PING")
+        if t and p is not None:
+            reschedule_job(jid, t, p)
     scheduler.start()
+    ch = client.get_channel(CHANNEL_ID)
+    if ch:
+        await ch.send("🟢 Bot is online!")
 
-    # Send a message to the designated channel to announce the bot is online
-    channel = client.get_channel(CHANNEL_ID)
-    if channel:
-        await channel.send("🟢 Bot is now online and ready to go!")
-
-@tree.command(name="setscheduledtime", description="Set the scheduled job times and ping values (Time in HHMM format)")
-@app_commands.describe(job="Job number (1 or 2)", time="New job time (HHMM)", ping="New ping value in ms")
-async def set_scheduled_time(interaction: discord.Interaction, job: int, time: str, ping: int):
-    username = interaction.user.name
-
-    # Validate time format (HHMM)
-    if not time.isdigit() or len(time) != 4:
-        await interaction.response.send_message("⚠️ Invalid time format. Please use HHMM (24hr) format (e.g., 0000, 1530, 2359).")
-        return
-
-    try:
-        hour = int(time[:2])
-        minute = int(time[2:])
-        if not (0 <= hour < 24 and 0 <= minute < 60):
-            await interaction.response.send_message("⚠️ Invalid time value.")
-            return
-    except ValueError:
-        await interaction.response.send_message("⚠️ Invalid time value.")
-        return
-
-    try:
-        # Call reschedule_job directly; no need to modify config here
-        if job == 1:
-            reschedule_job("set_ping_job_1", time, ping)
-            await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
-
-        elif job == 2:
-            reschedule_job("set_ping_job_2", time, ping)
-            await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
-
-        else:
-            await interaction.response.send_message("⚠️ Invalid job number. Please choose 1 or 2.")
-
-    except Exception as e:
-        logger.error(f"Error updating schedule for Job {job}: {e}")
-        await interaction.response.send_message(f"❌ Error updating schedule: {e}")
-
-# Django command entry point
+# Django management command
 class Command(BaseCommand):
-    help = "Starts the Discord bot"
+    help = "Starts the Discord Ping Bot"
 
     def handle(self, *args, **options):
-        # No need to change this method since it's already reading from the config
-        # and initializing jobs accordingly.
+        tree.sync()
         client.run(DISCORD_TOKEN)
+```
