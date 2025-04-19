@@ -6,7 +6,7 @@ from pytz import timezone
 from datetime import datetime
 
 # Load config.jsonc
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.jsonc")
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../../config.jsonc")
 
 with open(CONFIG_PATH, "r") as f:
     config = json5.load(f)
