@@ -228,11 +228,27 @@ async def setscheduledtime(interaction: discord.Interaction, job: int, time: str
 @tree.command(name="bans", description="Show last 5 temp bans")
 async def bans(interaction: discord.Interaction):
     logger.info(f"[/bans] Requested by {interaction.user} (ID: {interaction.user.id})")
+    
+    # Fetch recent bans
     data = get_recent_bans()
-    if not data:
-        return await interaction.response.send_message("⚠️ No bans found.")
-    lines = [f"`{i+1}` - {get_player_name(b['player_id'])} (ID: `{b['player_id']}`)" for i,b in enumerate(data)]
-    await interaction.response.send_message("**Last 5 Bans:**\n" + "\n".join(lines))
+    
+    # Filter out only temp bans with a valid player_id
+    temp_bans = [
+        b for b in data if b.get("type") == "temp" and b.get("player_id") is not None
+    ]
+    
+    # Check if there are any temp bans
+    if not temp_bans:
+        return await interaction.response.send_message("⚠️ No temp bans found.")
+    
+    # Create list of temp bans
+    lines = []
+    for i, b in enumerate(temp_bans[:5]):  # Only show the last 5
+        player_name = get_player_name(b['player_id'])  # Assuming this function works properly
+        lines.append(f"`{i + 1}` - {player_name} (ID: `{b['player_id']}`)")
+
+    # Send the list of temp bans
+    await interaction.response.send_message("**Last 5 Temp Bans:**\n" + "\n".join(lines))
 
 @tree.command(name="unban", description="Unban player by ban index")
 @app_commands.describe(index="1-5")
@@ -275,17 +291,19 @@ async def help_command(interaction: discord.Interaction):
     await interaction.response.send_message(msg)
 
 # --- Bot startup ---
+# Ensure you are sending the message once the bot is ready.
 @client.event
 async def on_ready():
-    for jid in ("set_ping_job_1", "set_ping_job_2"):
-        t = config.get(f"{jid.upper()}_TIME")
-        p = config.get(f"{jid.upper()}_PING")
-        if t and p is not None:
-            reschedule_job(jid, t, p)
-    scheduler.start()
-    ch = client.get_channel(CHANNEL_ID)
-    if ch:
-        await ch.send("🟢 Bot is online!")
+    logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
+    try:
+        # Send a message to a specific channel (e.g., the first channel it can access)
+        channel = client.get_channel(CHANNEL_ID)  # Make sure CHANNEL_ID is valid
+        if channel:
+            await channel.send("🟢 Bot is online!")
+        else:
+            logger.error("Unable to find channel.")
+    except Exception as e:
+        logger.error(f"Failed to send online status message: {e}")
 
 # Django management command
 class Command(BaseCommand):
