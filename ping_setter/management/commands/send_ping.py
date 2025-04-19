@@ -11,6 +11,9 @@ from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from .logging_config import setup_logging
 
+# Logging setup
+logger = setup_logging()
+
 # Load config from config.jsonc
 def load_config():
     try:
@@ -32,12 +35,26 @@ def save_config(config):
     except Exception as e:
         logger.error(f"Failed to save config: {e}")
 
-# Logging setup
-logger = setup_logging()
+# Load config once at top
+config = load_config()
+
+DISCORD_TOKEN = config.get("DISCORD_TOKEN")
+CHANNEL_ID = config.get("CHANNEL_ID")
+
+if not DISCORD_TOKEN:
+    raise ValueError("DISCORD_TOKEN is not defined in config.jsonc")
+if not CHANNEL_ID:
+    raise ValueError("CHANNEL_ID is not defined in config.jsonc")
+
+
 
 # Initialize scheduler with timezone
-tz_name = os.getenv('TIMEZONE', 'Australia/Sydney')
-scheduler = AsyncIOScheduler(timezone=timezone(tz_name))
+try:
+    tz = timezone(tz_name)
+except Exception as e:
+    logger.warning(f"Invalid timezone in config: {tz_name}. Falling back to Australia/Sydney.")
+    tz = timezone("Australia/Sydney")
+scheduler = AsyncIOScheduler(timezone=tz)
 
 # Discord bot setup
 intents = discord.Intents.default()
@@ -136,8 +153,7 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
             replace_existing=True
         )
 
-        # Save to config.jsonc instead of .env
-        config = load_config()
+        # Update and persist config
         config[f"{job_id.upper()}_TIME"] = time_str
         config[f"{job_id.upper()}_PING"] = ping
         save_config(config)
@@ -150,8 +166,7 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
 # Discord bot events and commands
 @client.event
 async def on_ready():
-    config = load_config()
-
+          
     job_1_time_initial = config["SCHEDULED_JOB_1_TIME"]
     job_2_time_initial = config["SCHEDULED_JOB_2_TIME"]
 
@@ -206,25 +221,17 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
         return
 
     try:
-        config = load_config()
-
+        # Call reschedule_job directly; no need to modify config here
         if job == 1:
-            config["SCHEDULED_JOB_1_TIME"] = time
-            config["SCHEDULED_JOB_1_PING"] = ping
             reschedule_job("set_ping_job_1", time, ping)
             await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
 
         elif job == 2:
-            config["SCHEDULED_JOB_2_TIME"] = time
-            config["SCHEDULED_JOB_2_PING"] = ping
             reschedule_job("set_ping_job_2", time, ping)
             await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
 
         else:
             await interaction.response.send_message("⚠️ Invalid job number. Please choose 1 or 2.")
-
-        # Save changes to config
-        save_config(config)
 
     except Exception as e:
         logger.error(f"Error updating schedule for Job {job}: {e}")
@@ -237,4 +244,4 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         # No need to change this method since it's already reading from the config
         # and initializing jobs accordingly.
-        client.run(BOT_TOKEN)
+        client.run(DISCORD_TOKEN)
