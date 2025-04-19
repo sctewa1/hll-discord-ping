@@ -1,4 +1,3 @@
-```python
 import json5
 import os
 import logging
@@ -228,4 +227,3 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         tree.sync()
         client.run(DISCORD_TOKEN)
-```
