@@ -296,7 +296,15 @@ class Command(BaseCommand):
             try:
                 await tree.sync()
                 logger.info(f"Synced slash commands as {client.user} (ID: {client.user.id})")
+
+                # Schedule the jobs on bot startup
+                reschedule_job("set_ping_job_1", config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING"))
+                reschedule_job("set_ping_job_2", config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING"))
+
+                # Start the scheduler
+                scheduler.start()
+                logger.info("Scheduler started and jobs scheduled.")
             except Exception as e:
-                logger.error(f"Failed to sync commands: {e}")
-        
+                logger.error(f"Failed during on_ready: {e}")
+
         client.run(DISCORD_TOKEN)
