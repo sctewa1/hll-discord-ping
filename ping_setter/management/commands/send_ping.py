@@ -332,6 +332,9 @@ class Command(BaseCommand):
         job_1_hour, job_1_minute = map(int, job_1_time_initial.split(":"))
         job_2_hour, job_2_minute = map(int, job_2_time_initial.split(":"))
 
+        ping_1_initial = int(os.getenv("PING_JOB_1_PING", "500"))
+        ping_2_initial = int(os.getenv("PING_JOB_2_PING", "320"))
+
         async def set_ping_job_1(current_time_str, current_ping):
             hour = int(current_time_str[:2])
             minute = int(current_time_str[2:])
