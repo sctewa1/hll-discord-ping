@@ -256,6 +256,7 @@ async def online(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("🟢 Bot is online, but failed to reach API.")
 
+@tree.command(name="help", description="Show this help message")
 async def help_command(interaction: discord.Interaction):
     logger.info(f"[/help] Requested by {interaction.user} (ID: {interaction.user.id})")
     msg = (
