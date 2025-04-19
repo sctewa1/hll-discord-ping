@@ -104,10 +104,31 @@ def unban_player(player_id: str) -> bool:
         return False
 
 def reschedule_job(job_id: str, time_str: str, ping: int):
-    cleaned_time_str = time_str.strip("'")  # Remove potential single quotes
-    hour = int(cleaned_time_str[:2])
-    minute = int(cleaned_time_str[2:])
-    trigger = CronTrigger(hour=hour, minute=minute, timezone=timezone(tz_name))
+    try:
+        # Update the existing job with new time and ping
+        hour, minute = map(int, time_str.split(":"))
+
+        # Remove the old job if it exists
+        existing_job = scheduler.get_job(job_id)
+        if existing_job:
+            scheduler.remove_job(job_id)
+
+        # Schedule the job again with new time and ping
+        scheduler.add_job(
+            send_ping,  # Assuming this function exists elsewhere
+            trigger=CronTrigger(hour=hour, minute=minute),
+            id=job_id,
+            args=[ping],
+            replace_existing=True
+        )
+
+        # Save updated schedule and ping to .env (as strings)
+        set_key(".env", f"{job_id}_TIME", time_str)
+        set_key(".env", f"{job_id}_PING", str(ping))  # Important: write as string
+
+        logger.info(f"Rescheduled job '{job_id}' to {time_str} with ping {ping}")
+    except Exception as e:
+        logger.error(f"Error updating schedule: {e}")
 
     async def scheduled_job(current_time_str, current_ping):
         hour_display = current_time_str[:2]
