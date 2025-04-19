@@ -18,7 +18,7 @@ logger = setup_logging()
 def load_config():
     try:
         with open("config.jsonc", "r") as f:
-            return jsonc.load(f)
+            return json5.load(f)
     except FileNotFoundError:
         logger.error("Config file not found. Using default settings.")
         return {
@@ -31,7 +31,7 @@ def load_config():
 def save_config(config):
     try:
         with open("config.jsonc", "w") as f:
-            json.dump(config, f, indent=4)
+            json5.dump(config, f, indent=4)
     except Exception as e:
         logger.error(f"Failed to save config: {e}")
 
