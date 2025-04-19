@@ -231,10 +231,30 @@ async def unban(interaction: discord.Interaction, index: int):
     else:
         await interaction.response.send_message("❌ Unban failed.")
 
-@tree.command(name="help", description="Show bot commands")
+@tree.command(name="online", description="Check if bot and API are running")
+async def online(interaction: discord.Interaction):
+    ping = get_max_ping_autokick()
+    if ping is not None:
+        await interaction.response.send_message(f"🟢 Bot and API are online! Current max ping autokick: `{ping}` ms.")
+    else:
+        await interaction.response.send_message("🟢 Bot is online, but failed to reach API.")
+
+@tree.command(name="help", description="Show this help message")
 async def help_command(interaction: discord.Interaction):
-    cmds = ["/curping", "/setping <ping>", "/curscheduledtime", "/setscheduledtime <job> <time> <ping>", "/bans", "/unban <index>"]
-    await interaction.response.send_message("📜 Commands:\n" + "\n".join(cmds))
+    msg = (
+    "📘 **Getting Started:**\n"
+    "Welcome to the HLL command tool!\n"
+    "📜 **List of Commands:**\n"
+    "/bans - Show recent bans\n"
+    "/unban - Unban a player from recent bans\n"
+    "/curping - Show current max ping autokick value\n"
+    "/setping - Set max ping autokick value (in ms)\n"
+    "/curscheduledtime - Show the current scheduled job times and ping values\n"
+    "/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
+    "/online - Check if bot and API are running\n"
+    "/help - Show this help message"
+    )
+
 
 # --- Bot startup ---
 @client.event
