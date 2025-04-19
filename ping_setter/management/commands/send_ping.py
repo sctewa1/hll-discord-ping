@@ -1,4 +1,4 @@
-import json
+import jsonc
 import os
 import logging
 import requests
@@ -18,7 +18,7 @@ logger = setup_logging()
 def load_config():
     try:
         with open("config.jsonc", "r") as f:
-            return json.load(f)
+            return jsonc.load(f)
     except FileNotFoundError:
         logger.error("Config file not found. Using default settings.")
         return {
