@@ -3,6 +3,7 @@ import os
 import logging
 import requests
 import discord
+import asyncio
 from discord.ext import commands
 from discord import app_commands
 from django.core.management.base import BaseCommand
