@@ -326,15 +326,11 @@ class Command(BaseCommand):
     help = "Starts the Discord bot"
 
     def handle(self, *args, **options):
-        job_1_time_initial = os.getenv('SCHEDULED_JOB_1_TIME', '0001')
-        job_2_time_initial = os.getenv('SCHEDULED_JOB_2_TIME', '1500')
-        ping_1_initial = int(os.getenv('SCHEDULED_JOB_1_PING', 500))
-        ping_2_initial = int(os.getenv('SCHEDULED_JOB_2_PING', 320))
+        job_1_time_initial = os.getenv("PING_JOB_1_TIME", "12:00")  # e.g., "0:09"
+        job_2_time_initial = os.getenv("PING_JOB_2_TIME", "15:00")
 
-        job_1_hour = int(job_1_time_initial[:2])
-        job_1_minute = int(job_1_time_initial[2:])
-        job_2_hour = int(job_2_time_initial[:2])
-        job_2_minute = int(job_2_time_initial[2:])
+        job_1_hour, job_1_minute = map(int, job_1_time_initial.split(":"))
+        job_2_hour, job_2_minute = map(int, job_2_time_initial.split(":"))
 
         async def set_ping_job_1(current_time_str, current_ping):
             hour = int(current_time_str[:2])
