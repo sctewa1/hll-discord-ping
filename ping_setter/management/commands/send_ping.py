@@ -232,7 +232,7 @@ async def bans(interaction: discord.Interaction):
     # Fetch recent bans
     data = get_recent_bans()
     
-    # Filter out only temp bans with a valid player_id
+    # Ensure that data is in list format and filter only temp bans with valid player_id
     temp_bans = [
         b for b in data if b.get("type") == "temp" and b.get("player_id") is not None
     ]
@@ -241,9 +241,9 @@ async def bans(interaction: discord.Interaction):
     if not temp_bans:
         return await interaction.response.send_message("⚠️ No temp bans found.")
     
-    # Create list of temp bans
+    # Create list of temp bans (we only want the last 5)
     lines = []
-    for i, b in enumerate(temp_bans[:5]):  # Only show the last 5
+    for i, b in enumerate(temp_bans[:5]):  # Only show the last 5 bans
         player_name = get_player_name(b['player_id'])  # Assuming this function works properly
         lines.append(f"`{i + 1}` - {player_name} (ID: `{b['player_id']}`)")
 
