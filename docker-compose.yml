@@ -1,11 +1,9 @@
-
 services:
   ping-setter:
     build: .
     container_name: ping-setter-bot
-    env_file: .env
     volumes:
       - ./logs:/opt/ping_setter_hll/logs
+      - ./config.jsonc:/opt/ping_setter_hll/config.jsonc  # Mount the config.jsonc file
     command: python manage.py send_ping
     restart: unless-stopped
-
