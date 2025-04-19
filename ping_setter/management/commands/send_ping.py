@@ -170,7 +170,7 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
 # --- Slash commands ---
 @tree.command(name="curping", description="Show current max ping autokick")
 async def curping(interaction: discord.Interaction):
-    ogger.info(f"[/curping] Requested by {interaction.user} (ID: {interaction.user.id})")
+    logger.info(f"[/curping] Requested by {interaction.user} (ID: {interaction.user.id})")
     ping = get_max_ping_autokick()
     if ping is not None:
         await interaction.response.send_message(f"📡 Current max ping autokick is `{ping}` ms.")
@@ -281,5 +281,8 @@ class Command(BaseCommand):
     help = "Starts the Discord Ping Bot"
 
     def handle(self, *args, **options):
-        tree.sync()
+        asyncio.run(self.start_bot())
+
+    async def start_bot(self):
+        await tree.sync()
         client.run(DISCORD_TOKEN)
