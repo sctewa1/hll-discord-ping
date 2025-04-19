@@ -1,45 +1,50 @@
+import json
 import os
 import logging
 import requests
 import discord
 from discord.ext import commands
 from discord import app_commands
-from dotenv import load_dotenv
 from django.core.management.base import BaseCommand
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
-from dotenv import set_key
 from .logging_config import setup_logging
 
-# Load environment variables
-load_dotenv()
-BOT_TOKEN = os.getenv('DISCORD_TOKEN')
-CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID'))
-API_BASE_URL = os.getenv('API_BASE_URL')
-API_BEARER_TOKEN = os.getenv('API_BEARER_TOKEN')
+# Load config from config.jsonc
+def load_config():
+    try:
+        with open("config.jsonc", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.error("Config file not found. Using default settings.")
+        return {
+            "SCHEDULED_JOB_1_TIME": "0009",
+            "SCHEDULED_JOB_1_PING": 500,
+            "SCHEDULED_JOB_2_TIME": "1500",
+            "SCHEDULED_JOB_2_PING": 320
+        }
 
-# Retrieve timezone from .env file
-tz_name = os.getenv('TIMEZONE', 'Australia/Sydney')
+def save_config(config):
+    try:
+        with open("config.jsonc", "w") as f:
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        logger.error(f"Failed to save config: {e}")
 
-# Initialize scheduler with the specified timezone
-scheduler = AsyncIOScheduler(timezone=timezone(tz_name))
-
-# Logging
+# Logging setup
 logger = setup_logging()
-logger.info('Bot has started')
+
+# Initialize scheduler with timezone
+tz_name = os.getenv('TIMEZONE', 'Australia/Sydney')
+scheduler = AsyncIOScheduler(timezone=timezone(tz_name))
 
 # Discord bot setup
 intents = discord.Intents.default()
 client = commands.Bot(command_prefix="!", intents=intents)
 tree = client.tree
 
-HEADERS = {
-    "Authorization": f"Bearer {API_BEARER_TOKEN}",
-    "Content-Type": "application/json"
-}
-
-# API helper functions
+# API helper functions (same as in your original code)
 def get_max_ping_autokick() -> int | None:
     try:
         response = requests.get(f"{API_BASE_URL}/api/get_server_settings", headers=HEADERS)
@@ -131,9 +136,11 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
             replace_existing=True
         )
 
-        # Save to .env
-        set_key(".env", f"{job_id.upper()}_TIME", time_str)
-        set_key(".env", f"{job_id.upper()}_PING", str(ping))
+        # Save to config.jsonc instead of .env
+        config = load_config()
+        config[f"{job_id.upper()}_TIME"] = time_str
+        config[f"{job_id.upper()}_PING"] = ping
+        save_config(config)
 
         logger.info(f"[{job_id}] Rescheduled to {time_str} with ping {ping}")
 
@@ -143,17 +150,33 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
 # Discord bot events and commands
 @client.event
 async def on_ready():
-    GUILD_ID = 1318878021335388255  # your server ID
-    guild = discord.Object(id=GUILD_ID)
+    config = load_config()
 
-    # Sync and capture the list of commands registered
-    registered = await tree.sync(guild=guild)
-    logger.info(f"🔁 Synced {len(registered)} command(s) to guild {GUILD_ID}")
+    job_1_time_initial = config["SCHEDULED_JOB_1_TIME"]
+    job_2_time_initial = config["SCHEDULED_JOB_2_TIME"]
 
-    registered_global = await tree.sync()  # no guild argument
-    logger.info(f"🔁 Synced {len(registered_global)} global command(s)")
+    # Slice the time strings into hours and minutes directly (since no colon is present)
+    job_1_hour, job_1_minute = int(job_1_time_initial[:2]), int(job_1_time_initial[2:])
+    job_2_hour, job_2_minute = int(job_2_time_initial[:2]), int(job_2_time_initial[2:])
 
-    logger.info("🔔 Bot has started and is now online!")
+    ping_1_initial = config["SCHEDULED_JOB_1_PING"]
+    ping_2_initial = config["SCHEDULED_JOB_2_PING"]
+
+    # Register async jobs properly using scheduler.add_job
+    scheduler.add_job(
+        scheduled_ping_job, 
+        CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)),
+        id="set_ping_job_1", 
+        args=["set_ping_job_1", job_1_time_initial, ping_1_initial]
+    )
+    
+    scheduler.add_job(
+        scheduled_ping_job, 
+        CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)),
+        id="set_ping_job_2", 
+        args=["set_ping_job_2", job_2_time_initial, ping_2_initial]
+    )
+
     # Start the scheduler here
     scheduler.start()
 
@@ -161,36 +184,6 @@ async def on_ready():
     channel = client.get_channel(CHANNEL_ID)
     if channel:
         await channel.send("🟢 Bot is now online and ready to go!")
-
-@tree.command(name="curping", description="Show current max ping kick setting")
-async def curping(interaction: discord.Interaction):
-    ping = get_max_ping_autokick()
-    if ping is not None:
-        await interaction.response.send_message(f"📡 Current max ping autokick is set to: `{ping}` ms.")
-    else:
-        await interaction.response.send_message("⚠️ Could not fetch the current max ping value.")
-
-@tree.command(name="setping", description="Set new max ping kick value")
-@app_commands.describe(ping="The new max ping value (in ms)")
-async def setping(interaction: discord.Interaction, ping: int):
-    username = interaction.user.name  # Get the Discord username of the user who triggered the command
-
-    # Log the attempt to set the ping
-    logger.info(f"User `{username}` is attempting to set max ping autokick to `{ping}` ms.")
-
-    # Check if the ping value is within a reasonable range (you can adjust this range as needed)
-    if ping <= 0 or ping > 10000:
-        await interaction.response.send_message("⚠️ Invalid ping value. Please provide a value between 1 and 10,000 ms.")
-        logger.warning(f"User `{username}` provided an invalid ping value: `{ping}` ms (must be between 1 and 10,000 ms).")
-        return
-
-    # Attempt to set the max ping
-    if set_max_ping_autokick(ping):
-        await interaction.response.send_message(f"✅ Max ping autokick set to `{ping}` ms.")
-        logger.info(f"User `{username}` successfully set max ping autokick to `{ping}` ms.")
-    else:
-        await interaction.response.send_message("⚠️ Failed to set max ping autokick.")
-        logger.error(f"User `{username}` failed to set max ping autokick to `{ping}` ms.")
 
 @tree.command(name="setscheduledtime", description="Set the scheduled job times and ping values (Time in HHMM format)")
 @app_commands.describe(job="Job number (1 or 2)", time="New job time (HHMM)", ping="New ping value in ms")
@@ -213,21 +206,25 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
         return
 
     try:
+        config = load_config()
+
         if job == 1:
-            set_key(".env", "SCHEDULED_JOB_1_TIME", time)  # Write time as string
-            set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))  # Write ping as string
-            logger.info(f"CALLING RESCHEDULE_JOB FOR JOB 1 - time: '{time}', ping: {ping}")
+            config["SCHEDULED_JOB_1_TIME"] = time
+            config["SCHEDULED_JOB_1_PING"] = ping
             reschedule_job("set_ping_job_1", time, ping)
             await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
 
         elif job == 2:
-            set_key(".env", "SCHEDULED_JOB_2_TIME", time)  # Write time as string
-            set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))  # Write ping as string
+            config["SCHEDULED_JOB_2_TIME"] = time
+            config["SCHEDULED_JOB_2_PING"] = ping
             reschedule_job("set_ping_job_2", time, ping)
             await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
 
         else:
             await interaction.response.send_message("⚠️ Invalid job number. Please choose 1 or 2.")
+
+        # Save changes to config
+        save_config(config)
 
     except Exception as e:
         logger.error(f"Error updating schedule for Job {job}: {e}")
@@ -238,33 +235,6 @@ class Command(BaseCommand):
     help = "Starts the Discord bot"
 
     def handle(self, *args, **options):
-        job_1_time_initial = os.getenv("SCHEDULED_JOB_1_TIME", "0009")  # Default to '0009' (HHMM format)
-        job_2_time_initial = os.getenv("SCHEDULED_JOB_2_TIME", "1500")  # Default to '1500' (HHMM format)
-
-        # Slice the time strings into hours and minutes directly (since no colon is present)
-        job_1_hour, job_1_minute = int(job_1_time_initial[:2]), int(job_1_time_initial[2:])
-        job_2_hour, job_2_minute = int(job_2_time_initial[:2]), int(job_2_time_initial[2:])
-
-        ping_1_initial = int(os.getenv("SCHEDULED_JOB_1_PING", 500))  # Default ping value for job 1
-        ping_2_initial = int(os.getenv("SCHEDULED_JOB_2_PING", 320))  # Default ping value for job 2
-
-        # Register async jobs properly using scheduler.add_job
-        scheduler.add_job(
-            scheduled_ping_job, 
-            CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)),
-            id="set_ping_job_1", 
-            args=["set_ping_job_1", job_1_time_initial, ping_1_initial]
-        )
-        
-        scheduler.add_job(
-            scheduled_ping_job, 
-            CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)),
-            id="set_ping_job_2", 
-            args=["set_ping_job_2", job_2_time_initial, ping_2_initial]
-        )
-
-        # Reschedule jobs
-        reschedule_job("set_ping_job_1", job_1_time_initial, ping_1_initial)
-        reschedule_job("set_ping_job_2", job_2_time_initial, ping_2_initial)
-
+        # No need to change this method since it's already reading from the config
+        # and initializing jobs accordingly.
         client.run(BOT_TOKEN)
