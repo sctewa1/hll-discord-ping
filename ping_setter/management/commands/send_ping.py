@@ -12,7 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from .logging_config import setup_logging
 
-# Absolute path to config.jsonc inside the container
+# Absolute path to config.jsonc inside the container.
 CONFIG_PATH = "/opt/ping_setter_hll/config.jsonc"
 
 # Logging setup
