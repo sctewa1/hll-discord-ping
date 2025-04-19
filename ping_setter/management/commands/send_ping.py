@@ -8,12 +8,9 @@ from dotenv import load_dotenv
 from django.core.management.base import BaseCommand
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR
 from pytz import timezone
-from datetime import datetime
 from dotenv import set_key
 from .logging_config import setup_logging
-
 
 # Load environment variables
 load_dotenv()
@@ -35,7 +32,6 @@ logger.info('Bot has started')
 # Discord bot setup
 intents = discord.Intents.default()
 client = commands.Bot(command_prefix="!", intents=intents)
-scheduler = AsyncIOScheduler()
 tree = client.tree
 
 HEADERS = {
@@ -58,7 +54,7 @@ def set_max_ping_autokick(ping: int) -> bool:
         response = requests.post(
             f"{API_BASE_URL}/api/set_max_ping_autokick",
             headers=HEADERS,
-            json={"max_ms": ping}  # 'ping' here is an integer
+            json={"max_ms": ping}
         )
         return response.ok
     except Exception as e:
@@ -103,50 +99,46 @@ def unban_player(player_id: str) -> bool:
         logger.error(f"Failed to unban player: {e}")
         return False
 
+# Global job function for setting max ping autokick
+async def scheduled_ping_job(job_id: str, current_time_str: str, current_ping: int):
+    hour_display = current_time_str[:2]
+    minute_display = current_time_str[2:]
+    if set_max_ping_autokick(current_ping):
+        logger.info(f"[{job_id}] Set max ping to {current_ping}ms ⏰ ({hour_display}:{minute_display})")
+        channel = client.get_channel(CHANNEL_ID)
+        if channel:
+            await channel.send(f"🔄 [{job_id}] Max ping autokick set to `{current_ping}` ms (Updated schedule: {hour_display}:{minute_display})")
+    else:
+        logger.warning(f"[{job_id}] Failed to set max ping to {current_ping}ms")
+
+# Reschedule job function
 def reschedule_job(job_id: str, time_str: str, ping: int):
     try:
-        # Update the existing job with new time and ping
         hour, minute = map(int, time_str.split(":"))
 
-        # Remove the old job if it exists
-        existing_job = scheduler.get_job(job_id)
-        if existing_job:
+        # Remove old job if exists
+        try:
             scheduler.remove_job(job_id)
+        except Exception as e:
+            logger.warning(f"[{job_id}] Tried to remove existing job: {e}")
 
-        # Schedule the job again with new time and ping
+        # Schedule updated job
         scheduler.add_job(
-            send_ping,  # Assuming this function exists elsewhere
-            trigger=CronTrigger(hour=hour, minute=minute),
+            scheduled_ping_job,
+            trigger=CronTrigger(hour=hour, minute=minute, timezone=timezone(tz_name)),
             id=job_id,
-            args=[ping],
+            args=[job_id, time_str, ping],
             replace_existing=True
         )
 
-        # Save updated schedule and ping to .env (as strings)
-        set_key(".env", f"{job_id}_TIME", time_str)
-        set_key(".env", f"{job_id}_PING", str(ping))  # Important: write as string
+        # Save to .env
+        set_key(".env", f"{job_id.upper()}_TIME", time_str)
+        set_key(".env", f"{job_id.upper()}_PING", str(ping))
 
-        logger.info(f"Rescheduled job '{job_id}' to {time_str} with ping {ping}")
+        logger.info(f"[{job_id}] Rescheduled to {time_str} with ping {ping}")
+
     except Exception as e:
-        logger.error(f"Error updating schedule: {e}")
-
-    async def scheduled_job(current_time_str, current_ping):
-        hour_display = current_time_str[:2]
-        minute_display = current_time_str[2:]
-        if set_max_ping_autokick(current_ping):
-            logger.info(f"Rescheduled job `{job_id}`: Set max ping to {current_ping}ms ⏰ ({hour_display}:{minute_display})")
-            channel = client.get_channel(CHANNEL_ID)
-            if channel:
-                await channel.send(f"🔄 Max ping autokick set to `{current_ping}` ms (Updated schedule: {hour_display}:{minute_display})")
-        else:
-            logger.warning(f"Rescheduled job `{job_id}`: Failed to set max ping to {current_ping}ms")
-
-    try:
-        scheduler.remove_job(job_id)
-    except Exception as e:
-        logger.warning(f"Attempted to remove job `{job_id}` but it did not exist. Exception: {e}")
-
-    scheduler.add_job(scheduled_job, trigger=trigger, id=job_id, args=[time_str, ping])
+        logger.error(f"[{job_id}] Failed to reschedule: {e}")
 
 # Discord bot events and commands
 @client.event
@@ -157,14 +149,11 @@ async def on_ready():
     # Sync and capture the list of commands registered
     registered = await tree.sync(guild=guild)
     logger.info(f"🔁 Synced {len(registered)} command(s) to guild {GUILD_ID}")
-    print(f"🔁 Synced {len(registered)} command(s) to guild {GUILD_ID}")
 
     registered_global = await tree.sync()  # no guild argument
     logger.info(f"🔁 Synced {len(registered_global)} global command(s)")
-    print(f"🔁 Synced {len(registered_global)} global command(s)")
 
     logger.info("🔔 Bot has started and is now online!")
-    print("🔔 Bot has started and is now online!")
     # Start the scheduler here
     scheduler.start()
 
@@ -203,25 +192,6 @@ async def setping(interaction: discord.Interaction, ping: int):
         await interaction.response.send_message("⚠️ Failed to set max ping autokick.")
         logger.error(f"User `{username}` failed to set max ping autokick to `{ping}` ms.")
 
-
-@tree.command(name="curscheduledtime", description="Show the current scheduled job times and ping values")
-async def cur_scheduled_time(interaction: discord.Interaction):
-    # Retrieve current job times and ping values from the environment
-    job_1_time = os.getenv('SCHEDULED_JOB_1_TIME', '0001')
-    job_2_time = os.getenv('SCHEDULED_JOB_2_TIME', '1500')
-    ping_1 = os.getenv('SCHEDULED_JOB_1_PING', 500)
-    ping_2 = os.getenv('SCHEDULED_JOB_2_PING', 320)
-
-    # Create the message to send
-    msg = (
-        f"🕒 **Current Scheduled Job Times and Pings:**\n"
-        f"1️⃣ Job 1: Time = `{job_1_time}`, Ping = `{ping_1}` ms\n"
-        f"2️⃣ Job 2: Time = `{job_2_time}`, Ping = `{ping_2}` ms"
-    )
-
-    # Send the message
-    await interaction.response.send_message(msg)
-
 @tree.command(name="setscheduledtime", description="Set the scheduled job times and ping values (Time in HHMM format)")
 @app_commands.describe(job="Job number (1 or 2)", time="New job time (HHMM)", ping="New ping value in ms")
 async def set_scheduled_time(interaction: discord.Interaction, job: int, time: str, ping: int):
@@ -248,14 +218,12 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
             set_key(".env", "SCHEDULED_JOB_1_PING", str(ping))  # Write ping as string
             logger.info(f"CALLING RESCHEDULE_JOB FOR JOB 1 - time: '{time}', ping: {ping}")
             reschedule_job("set_ping_job_1", time, ping)
-            logger.info(f"User `{username}` updated Job 1: Time set to `{time[:2]}:{time[2:]}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 1 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
 
         elif job == 2:
             set_key(".env", "SCHEDULED_JOB_2_TIME", time)  # Write time as string
             set_key(".env", "SCHEDULED_JOB_2_PING", str(ping))  # Write ping as string
             reschedule_job("set_ping_job_2", time, ping)
-            logger.info(f"User `{username}` updated Job 2: Time set to `{time[:2]}:{time[2:]}` and Ping set to `{ping}` ms.")
             await interaction.response.send_message(f"✅ Job 2 rescheduled to `{time[:2]}:{time[2:]}` with ping `{ping}` ms.")
 
         else:
@@ -265,100 +233,21 @@ async def set_scheduled_time(interaction: discord.Interaction, job: int, time: s
         logger.error(f"Error updating schedule for Job {job}: {e}")
         await interaction.response.send_message(f"❌ Error updating schedule: {e}")
 
-
-@tree.command(name="bans", description="List last 5 bans")
-async def bans(interaction: discord.Interaction):
-    data = get_recent_bans()
-    if not data:
-        await interaction.response.send_message("⚠️ No bans found.")
-        return
-
-    msg = "**Last 5 Bans:**\n"
-    for idx, ban in enumerate(data, 1):
-        name = get_player_name(ban.get("player_id"))
-        msg += f"`{idx}` - {name} (ID: `{ban.get('player_id')}`)\n"
-
-    await interaction.response.send_message(msg)
-
-@tree.command(name="unban", description="Unban player by ban number from the last /bans list")
-@app_commands.describe(index="Ban number from the /bans list (1-5)")
-async def unban(interaction: discord.Interaction, index: int):
-    data = get_recent_bans()
-    if not data:
-        await interaction.response.send_message("⚠️ No bans to unban.")
-        logger.info(f"User `{interaction.user.name}` attempted to unban a player, but no bans were found.")
-        return
-
-    if 1 <= index <= len(data):
-        player_id = data[index - 1]["player_id"]
-        name = get_player_name(player_id)
-        success = unban_player(player_id)
-
-        if success:
-            await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
-            logger.info(f"User `{interaction.user.name}` successfully unbanned player `{name}` (ID: `{player_id}`)")
-        else:
-            await interaction.response.send_message("❌ Failed to unban player.")
-            logger.error(f"User `{interaction.user.name}` failed to unban player `{name}` (ID: `{player_id}`).")
-    else:
-        await interaction.response.send_message("⚠️ Invalid ban index.")
-        logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
-
-@tree.command(name="help", description="Show help message")
-async def help_command(interaction: discord.Interaction):
-    msg = (
-        "📘 **Getting Started:**\n"
-        "Welcome to the HLL command tool!\n\n"
-        "📜 **List of Commands:**\n"
-        "/bans - Show recent bans\n"
-        "/unban - Unban a player from recent bans\n"
-        "/curping - Show current max ping kick\n"
-        "/setping - Set max ping kick\n"
-        "/curscheduledtime - there are 2 jobs to set the ping, see the times\n"
-        "/setscheduledtime job=1 time=0001 ping=500 - use this to set the time and ping (HHMM format)\n"
-        "/online - Check if bot and API are running\n"
-        "/help - Show this help message"
-    )
-    await interaction.response.send_message(msg)
-
 # Django command entry point
 class Command(BaseCommand):
     help = "Starts the Discord bot"
 
     def handle(self, *args, **options):
-        job_1_time_initial = os.getenv("PING_JOB_1_TIME", "12:00")  # e.g., "0:09"
+        job_1_time_initial = os.getenv("PING_JOB_1_TIME", "12:00")
         job_2_time_initial = os.getenv("PING_JOB_2_TIME", "15:00")
 
         job_1_hour, job_1_minute = map(int, job_1_time_initial.split(":"))
         job_2_hour, job_2_minute = map(int, job_2_time_initial.split(":"))
 
-        ping_1_initial = int(os.getenv("PING_JOB_1_PING", "500"))
-        ping_2_initial = int(os.getenv("PING_JOB_2_PING", "320"))
+        ping_1 = int(os.getenv("PING_JOB_1_PING", 100))
+        ping_2 = int(os.getenv("PING_JOB_2_PING", 150))
 
-        async def set_ping_job_1(current_time_str, current_ping):
-            hour = int(current_time_str[:2])
-            minute = int(current_time_str[2:])
-            if set_max_ping_autokick(current_ping):
-                logger.info(f"Scheduled: Set max ping to {current_ping}ms 🕐 ({hour:02d}:{minute:02d})")
-                channel = client.get_channel(CHANNEL_ID)
-                if channel:
-                    await channel.send(f"🕐 Max ping autokick set to `{current_ping}` ms (Scheduled {hour:02d}:{minute:02d})")
-            else:
-                logger.warning(f"Scheduled: Failed to set max ping to {current_ping}ms")
-
-        async def set_ping_job_2(current_time_str, current_ping):
-            hour = int(current_time_str[:2])
-            minute = int(current_time_str[2:])
-            if set_max_ping_autokick(current_ping):
-                logger.info(f"Scheduled: Set max ping to {current_ping}ms 🕒 ({hour:02d}:{minute:02d})")
-                channel = client.get_channel(CHANNEL_ID)
-                if channel:
-                    await channel.send(f"🕒 Max ping autokick set to `{current_ping}` ms (Scheduled {hour:02d}:{minute:02d})")
-            else:
-                logger.warning(f"Scheduled: Failed to set max ping to {current_ping}ms")
-
-        # Register async jobs properly using scheduler.add_job
-        scheduler.add_job(set_ping_job_1, CronTrigger(hour=job_1_hour, minute=job_1_minute, timezone=timezone(tz_name)), id="set_ping_job_1", args=[job_1_time_initial, ping_1_initial])
-        scheduler.add_job(set_ping_job_2, CronTrigger(hour=job_2_hour, minute=job_2_minute, timezone=timezone(tz_name)), id="set_ping_job_2", args=[job_2_time_initial, ping_2_initial])
+        reschedule_job("set_ping_job_1", job_1_time_initial, ping_1)
+        reschedule_job("set_ping_job_2", job_2_time_initial, ping_2)
 
         client.run(BOT_TOKEN)
