@@ -9,9 +9,10 @@ Currently we can
 
 /bans - Show recent bans
 /unban - Unban a player from recent bans
-/curping - Show current max ping kick
-/setping - Set max ping kick
+/curping - Show current max ping autokick value
+/setping - Set max ping autokick value (in ms)
+/curscheduledtime - Show current scheduled job times and ping values
+/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping follow prompts
 /online - Check if bot and API are running
 /help - Show this help message
-
 

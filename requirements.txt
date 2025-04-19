@@ -1,6 +1,6 @@
 Django>=3.2,<4.0
 discord.py>=2.0
-python-dotenv>=0.19.2
 aiohttp
 requests
 apscheduler
+json5
