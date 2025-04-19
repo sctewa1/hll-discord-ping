@@ -30,7 +30,8 @@ def save_config(config):
     except Exception as e:
         logger.error(f"Failed to save config: {e}")
 
-# Load config\config = load_config()
+# Load config
+config = load_config()
 
 # Required settings
 DISCORD_TOKEN = config.get("DISCORD_TOKEN")
