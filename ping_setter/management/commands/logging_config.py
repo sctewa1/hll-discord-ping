@@ -5,11 +5,23 @@ from logging.handlers import TimedRotatingFileHandler
 from pytz import timezone
 from datetime import datetime
 
-# Load config.jsonc
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "../../config.jsonc")
+# Absolute path to config.jsonc inside the container
+CONFIG_PATH = "/opt/ping_setter_hll/config.jsonc"
 
-with open(CONFIG_PATH, "r") as f:
-    config = json5.load(f)
+# Function to load the config
+def load_config():
+    try:
+        with open(CONFIG_PATH, "r") as f:
+            return json5.load(f)
+    except FileNotFoundError:
+        print("[logging_config] Config file not found. Using default settings.")
+        return {
+            "LOG_DIR": "/logs",
+            "TIMEZONE": "UTC"
+        }
+
+# Load config
+config = load_config()
 
 # Fallback values if not present in config
 LOG_DIR = config.get("LOG_DIR", "/logs")
