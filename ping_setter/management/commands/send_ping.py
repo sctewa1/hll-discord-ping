@@ -20,31 +20,35 @@ logger = setup_logging()
 # Load config from config.jsonc
 
 def load_config():
-    try:
-        with open(CONFIG_PATH, "r") as f:
-            return json5.load(f)
-    except FileNotFoundError:
-        logger.error("Config file not found at %s. Using default settings.", CONFIG_PATH)
-        return {
-            "DISCORD_TOKEN": "",
-            "DISCORD_CHANNEL_ID": None,
-            "API_BASE_URL": "",
-            "API_BEARER_TOKEN": "",
-            "TIMEZONE": "Australia/Sydney",
-            "SCHEDULED_JOB_1_TIME": "0009",
-            "SCHEDULED_JOB_1_PING": 500,
-            "SCHEDULED_JOB_2_TIME": "1500",
-            "SCHEDULED_JOB_2_PING": 320,
-            "LOG_DIR": "/opt/ping_setter_hll/logs"
-        }
-
-
-def save_config(cfg):
-    try:
-        with open(CONFIG_PATH, "w") as f:
-            json5.dump(cfg, f, indent=4)
-    except Exception as e:
-        logger.error(f"Failed to save config: {e}")
+    """
+    Try loading config from several known locations, falling back to defaults.
+    """
+    paths = [
+        CONFIG_PATH,
+        os.path.join(os.getcwd(), "config.jsonc"),
+    ]
+    for p in paths:
+        try:
+            with open(p, "r") as f:
+                logger.info(f"Loaded config from: {p}")
+                return json5.load(f)
+        except FileNotFoundError:
+            logger.debug(f"Config not found at: {p}")
+    logger.error(
+        "Config file not found in any of %s; using default settings.", paths
+    )
+    return {
+        "DISCORD_TOKEN": "",
+        "DISCORD_CHANNEL_ID": None,
+        "API_BASE_URL": "",
+        "API_BEARER_TOKEN": "",
+        "TIMEZONE": "Australia/Sydney",
+        "SCHEDULED_JOB_1_TIME": "0009",
+        "SCHEDULED_JOB_1_PING": 500,
+        "SCHEDULED_JOB_2_TIME": "1500",
+        "SCHEDULED_JOB_2_PING": 320,
+        "LOG_DIR": "/opt/ping_setter_hll/logs"
+    }
 
 # Load configuration
 config = load_config()
