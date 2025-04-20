@@ -1,11 +1,30 @@
+# Hell Let Loose (HLL) #hq4 lazy console player discord commands
 
-Made for mainly console players of HLL
-We don't sit in front of computers, but use our phones on discord all the time
+![Discord](https://img.shields.io/discord/1318878021335388255?color=%237289da&label=discord)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/sctewa1/hll-discord-ping)
 
-I've made a channel in our server called HQ4
-Head Quarters 4 is is that location in your hand to control the blueberries.
+Connect with us on Discord for feedback, troubleshooting, and update information: https://discord.gg/2E3h9vQSFu
 
-Currently we can 
+
+***
+
+### General
+
+CRCON is mainly designed and developed for PC gamers. For example, it is not possible for console players to use a keyboard to enter data in  the chat window. This tool framework is mainly (but not exclusively) aimed at console players.
+Most console players can open their phone and discord though! 
+
+> [!Note] 
+> The main reason for developing this tool came about for the server admins needing to unban console players.
+
+
+### Basics
+You must have access to a CRCON Server
+You need a bearer Token to access the API of CRCON Server
+You need basic knowledge about Linux and Docker
+I assume that you are using folder /opt as indended for proprietary software.
+
+
+Currently we can issue commands
 
 /bans - Show recent bans
 /unban - Unban a player from recent bans
@@ -16,3 +35,15 @@ Currently we can
 /online - Check if bot and API are running
 /help - Show this help message
 
+
+
+
+***
+
+### Links
+
+[Wiki](https://github.com/sctewa1/hll-discord-ping/wiki)
+coming soon
+
+- [FAQ](https://github.com/sctewa1/hll-discord-pingwiki/FAQ)
+coming soon
