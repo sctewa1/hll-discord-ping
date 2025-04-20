@@ -107,7 +107,7 @@ def get_recent_bans(limit=5):
         r = requests.get(f"{API_BASE_URL}/api/get_bans", headers=HEADERS)
         r.raise_for_status()
         bans = r.json().get("result", [])
-        return list(reversed([b for b in bans if b.get("type") == "temp" and b.get("player_id")])[-limit:])
+        return list(reversed([b for b in bans if b.get("type") == "temp" and b.get("player_id")]))[:limit]
     except Exception as e:
         logger.error(f"Failed to fetch bans: {e}")
         return []
@@ -292,19 +292,6 @@ async def help_command(interaction: discord.Interaction):
 
 # --- Bot startup ---
 # Ensure you are sending the message once the bot is ready.
-@client.event
-async def on_ready():
-    logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
-    try:
-        # Send a message to a specific channel (e.g., the first channel it can access)
-        channel = client.get_channel(CHANNEL_ID)  # Make sure CHANNEL_ID is valid
-        if channel:
-            await channel.send("🟢 Bot is online!")
-        else:
-            logger.error("Unable to find channel.")
-    except Exception as e:
-        logger.error(f"Failed to send online status message: {e}")
-
 # Django management command
 class Command(BaseCommand):
     help = "Starts the Discord Ping Bot"
@@ -314,6 +301,7 @@ class Command(BaseCommand):
         async def on_ready():
             try:
                 await tree.sync()
+                logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
                 logger.info(f"Synced slash commands as {client.user} (ID: {client.user.id})")
 
                 # Schedule the jobs on bot startup
@@ -325,5 +313,16 @@ class Command(BaseCommand):
                 logger.info("Scheduler started and jobs scheduled.")
             except Exception as e:
                 logger.error(f"Failed during on_ready: {e}")
+
+            try:
+                # Send a message to a specific channel (e.g., the first channel it can access)
+                channel = client.get_channel(CHANNEL_ID)  # Make sure CHANNEL_ID is valid
+                if channel:
+                    await channel.send("🟢 Bot is online!")
+                else:
+                    logger.error("Unable to find channel.")
+            except Exception as e:
+                logger.error(f"Failed to send online status message: {e}")
+
 
         client.run(DISCORD_TOKEN)
