@@ -311,7 +311,7 @@ async def on_ready():
     try:
         channel = client.get_channel(CHANNEL_ID)
         if channel:
-            await channel.send("🟢 Bot is online!")
+            #await channel.send("🟢 Bot is online!")
             logger.error("🟢 Bot is online!")
         else:
             logger.error("Unable to find channel.")
