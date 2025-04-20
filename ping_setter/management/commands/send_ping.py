@@ -250,18 +250,30 @@ async def bans(interaction: discord.Interaction):
     # Send the list of temp bans
     await interaction.response.send_message("**Last 5 Temp Bans:**\n" + "\n".join(lines))
 
-@tree.command(name="unban", description="Unban player by ban index")
-@app_commands.describe(index="1-5")
+@tree.command(name="unban", description="Unban player by ban number from the last /bans list")
+@app_commands.describe(index="Ban number from the /bans list (1-5)")
 async def unban(interaction: discord.Interaction, index: int):
-    logger.info(f"[/unban] Requested by {interaction.user} (ID: {interaction.user.id}) - Index {index}")
     data = get_recent_bans()
-    if not (1 <= index <= len(data)):
-        return await interaction.response.send_message("⚠️ Invalid ban index.")
-    pid = data[index-1]["player_id"]
-    if unban_player(pid):
-        await interaction.response.send_message(f"✅ Unbanned player ID `{pid}`.")
+    if not data:
+        await interaction.response.send_message("⚠️ No bans to unban.")
+        logger.info(f"User `{interaction.user.name}` attempted to unban a player, but no bans were found.")
+        return
+
+    if 1 <= index <= len(data):
+        player_id = data[index - 1]["player_id"]
+        name = get_player_name(player_id)
+        success = unban_player(player_id)
+
+        if success:
+            await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
+            logger.info(f"User `{interaction.user.name}` successfully unbanned player `{name}` (ID: `{player_id}`)")
+        else:
+            await interaction.response.send_message("❌ Failed to unban player.")
+            logger.error(f"User `{interaction.user.name}` failed to unban player `{name}` (ID: `{player_id}`).")
     else:
-        await interaction.response.send_message("❌ Unban failed.")
+        await interaction.response.send_message("⚠️ Invalid ban index.")
+        logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
+
 
 @tree.command(name="online", description="Check if bot and API are running")
 async def online(interaction: discord.Interaction):
