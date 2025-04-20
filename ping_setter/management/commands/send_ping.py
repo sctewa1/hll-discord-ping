@@ -253,6 +253,8 @@ async def bans(interaction: discord.Interaction):
 @tree.command(name="unban", description="Unban player by ban number from the last /bans list")
 @app_commands.describe(index="Ban number from the /bans list (1-5)")
 async def unban(interaction: discord.Interaction, index: int):
+    logger.info(f"[/unban] Requested by {interaction.user} (ID: {interaction.user.id}), index: {index}")
+ 
     data = get_recent_bans()
     if not data:
         await interaction.response.send_message("⚠️ No bans to unban.")
