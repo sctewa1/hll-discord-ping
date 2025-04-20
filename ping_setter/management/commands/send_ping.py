@@ -292,37 +292,34 @@ async def help_command(interaction: discord.Interaction):
 
 # --- Bot startup ---
 # Ensure you are sending the message once the bot is ready.
+@client.event
+async def on_ready():
+    try:
+        await tree.sync()
+        logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
+        logger.info(f"Synced slash commands as {client.user} (ID: {client.user.id})")
+
+        # Schedule the jobs
+        reschedule_job("set_ping_job_1", config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING"))
+        reschedule_job("set_ping_job_2", config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING"))
+
+        scheduler.start()
+        logger.info("Scheduler started and jobs scheduled.")
+    except Exception as e:
+        logger.error(f"Failed during on_ready: {e}")
+
+    try:
+        channel = client.get_channel(CHANNEL_ID)
+        if channel:
+            await channel.send("🟢 Bot is online!")
+            logger.error("🟢 Bot is online!")
+        else:
+            logger.error("Unable to find channel.")
+    except Exception as e:
+        logger.error(f"Failed to send online status message: {e}")
 # Django management command
 class Command(BaseCommand):
     help = "Starts the Discord Ping Bot"
 
     def handle(self, *args, **options):
-        @client.event
-        async def on_ready():
-            try:
-                await tree.sync()
-                logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
-                logger.info(f"Synced slash commands as {client.user} (ID: {client.user.id})")
-
-                # Schedule the jobs on bot startup
-                reschedule_job("set_ping_job_1", config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING"))
-                reschedule_job("set_ping_job_2", config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING"))
-
-                # Start the scheduler
-                scheduler.start()
-                logger.info("Scheduler started and jobs scheduled.")
-            except Exception as e:
-                logger.error(f"Failed during on_ready: {e}")
-
-            try:
-                # Send a message to a specific channel (e.g., the first channel it can access)
-                channel = client.get_channel(CHANNEL_ID)  # Make sure CHANNEL_ID is valid
-                if channel:
-                    await channel.send("🟢 Bot is online!")
-                else:
-                    logger.error("Unable to find channel.")
-            except Exception as e:
-                logger.error(f"Failed to send online status message: {e}")
-
-
-        client.run(DISCORD_TOKEN)
+       client.run(DISCORD_TOKEN)
