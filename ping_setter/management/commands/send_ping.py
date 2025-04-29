@@ -476,7 +476,7 @@ async def on_ready():
         logger.info(f"Synced slash commands for {client.user} (ID: {client.user.id})")
 
         # Fetch and cache maps ONCE at startup
-        await fetch_and_cache_maps()
+        fetch_and_cache_maps()
         logger.info("Fetched and cached map data.")
 
         # Reschedule jobs
