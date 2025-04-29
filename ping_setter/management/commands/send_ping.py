@@ -388,8 +388,8 @@ async def online(interaction: discord.Interaction):
 # Slash command: /voteEnforceMap
 @tree.command(name="voteenforcemap", description="Enforce a specific map to show up each time in future votes")
 @app_commands.describe(map_name="Name of the map to enforce")
-@app_commands.autocomplete(map=map_name_autocomplete)
-async def vote_enforce_map(interaction: discord.Interaction, map_name: str):
+@app_commands.autocomplete(map_name=map_name_autocomplete)  # Use map_name here instead of map
+async def vote_enforce_map(interaction: discord.Interaction, map_name: str):  # Use map_name in the function signature
     if is_enforce_active():
         await interaction.response.send_message(
             embed=Embed(
