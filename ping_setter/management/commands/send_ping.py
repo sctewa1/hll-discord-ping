@@ -1,7 +1,11 @@
 import json5
 import os
 import logging
+import subprocess
 import requests
+from pathlib import Path
+from discord import Embed
+
 import discord
 import asyncio
 from discord.ext import commands
@@ -45,7 +49,9 @@ def load_config():
         "SCHEDULED_JOB_1_PING": 500,
         "SCHEDULED_JOB_2_TIME": "1500",
         "SCHEDULED_JOB_2_PING": 320,
-        "LOG_DIR": "/opt/ping_setter_hll/logs"
+        "LOG_DIR": "/opt/ping_setter_hll/logs",
+        "HLL_DISCORD_UTILS_CONFIG": "/opt/hll_discord_utils/config.json",
+        "HLL_DISCORD_UTILS_DIR": "/opt/hll_discord_utils/"
     }
 # Load configuration
 config = load_config()
@@ -55,6 +61,8 @@ DISCORD_TOKEN    = config.get("DISCORD_TOKEN")
 CHANNEL_ID       = config.get("CHANNEL_ID")
 API_BASE_URL     = config.get("API_BASE_URL")
 API_BEARER_TOKEN = config.get("API_BEARER_TOKEN")
+HLL_DISCORD_UTILS_CONFIG = config.get("HLL_DISCORD_UTILS_CONFIG")
+HLL_DISCORD_UTILS_DIR =  config.get("HLL_DISCORD_UTILS_DIR")
 
 if not DISCORD_TOKEN or CHANNEL_ID is None or not API_BASE_URL or not API_BEARER_TOKEN:
     raise ValueError("Essential configuration missing in config.jsonc")
@@ -81,6 +89,97 @@ client = commands.Bot(command_prefix="!", intents=intents)
 tree = client.tree
 
 # --- API helper functions ---
+# Cache map data
+cached_maps = {}
+
+def fetch_and_cache_maps() -> bool:
+    """
+    Fetches map data from the API and caches warfare maps.
+    
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    try:
+        r = requests.get(f"{API_BASE_URL}/api/get_maps", headers=HEADERS)
+        r.raise_for_status()
+        maps = r.json().get("result", [])
+        warfare_maps = {
+            map_data["id"]: map_data["pretty_name"]
+            for map_data in maps
+            if map_data.get("game_mode") == "warfare" and map_data.get("id") and map_data.get("pretty_name")
+        }
+        cached_maps.clear()
+        cached_maps.update(warfare_maps)
+        logger.info(f"Successfully cached {len(warfare_maps)} warfare maps.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to fetch and cache maps: {e}")
+        return False
+
+async def map_name_autocomplete(interaction: discord.Interaction, current: str):
+    return [
+        app_commands.Choice(name=name, value=map_id)
+        for map_id, name in cached_maps.items()
+        if current.lower() in name.lower()
+    ]
+
+# Function to restart HLL Discord Utils
+def restart_hll_utils():
+    try:
+        subprocess.run(["/opt/ping_setter_hll/restart_hll_utils.sh"], check=True)
+        logger.info("Restarted HLL Discord Utils successfully.")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to restart HLL Discord Utils: {e}")
+
+# Function to check if map enforcement is already active
+def is_enforce_active():
+    try:
+        with open(HLL_DISCORD_UTILS_CONFIG, "r") as f:
+            config_data = json.load(f)
+        enforce_value = config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforce"]
+        return enforce_value == 1
+    except Exception as e:
+        logger.error(f"Error checking enforce status: {e}")
+        return False
+
+# Function to enable map enforcement
+def enable_enforce(map_name: str):
+    try:
+        with open(HLL_DISCORD_UTILS_CONFIG, "r") as f:
+            config_data = json.load(f)
+        
+        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforce"] = 1
+        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforced_maps"] = [map_name]
+
+        with open(HLL_DISCORD_UTILS_CONFIG, "w") as f:
+            json.dump(config_data, f, indent=4)
+
+        restart_hll_utils()
+        logger.info(f"Enforced map '{map_name}' and restarted HLL Discord Utils.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to enforce map '{map_name}': {e}")
+        return False
+
+# Function to disable map enforcement
+def disable_enforce():
+    try:
+        with open(HLL_DISCORD_UTILS_CONFIG, "r") as f:
+            config_data = json.load(f)
+        
+        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforce"] = 0
+        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforced_maps"] = []
+
+        with open(HLL_DISCORD_UTILS_CONFIG, "w") as f:
+            json.dump(config_data, f, indent=4)
+
+        restart_hll_utils()
+        logger.info("Disabled map enforcement and restarted HLL Discord Utils.")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to disable map enforcement: {e}")
+        return False
+
 def get_max_ping_autokick() -> int | None:
     try:
         r = requests.get(f"{API_BASE_URL}/api/get_server_settings", headers=HEADERS)
@@ -286,6 +385,63 @@ async def online(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("🟢 Bot is online, but failed to reach API.")
 
+# Slash command: /voteEnforceMap
+@tree.command(name="voteEnforceMap", description="Enforce a specific map to show up each time in future votes")
+@app_commands.describe(map_name="Name of the map to enforce")
+@app_commands.autocomplete(map=map_name_autocomplete)
+async def vote_enforce_map(interaction: discord.Interaction, map_name: str):
+    if is_enforce_active():
+        await interaction.response.send_message(
+            embed=Embed(
+                title="⚠️ Error",
+                description="Enforced map voting is already enabled. Please run `/voteDisableEnforce` first.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+        return
+
+    if enable_enforce(map_name):
+        await interaction.response.send_message(
+            embed=Embed(
+                title="✅ Success",
+                description=f"Map vote enforcement enabled for **{map_name}** and HLL Discord Utils restarted.",
+                color=discord.Color.green()
+            ),
+            ephemeral=True
+        )
+    else:
+        await interaction.response.send_message(
+            embed=Embed(
+                title="❌ Error",
+                description="Failed to enforce map. Please check logs for details.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+
+# Slash command: /voteDisableEnforce
+@tree.command(name="voteDisableEnforce", description="Disable enforced map voting")
+async def vote_disable_enforce(interaction: discord.Interaction):
+    if disable_enforce():
+        await interaction.response.send_message(
+            embed=Embed(
+                title="✅ Success",
+                description="Map vote enforcement disabled and HLL Discord Utils restarted.",
+                color=discord.Color.green()
+            ),
+            ephemeral=True
+        )
+    else:
+        await interaction.response.send_message(
+            embed=Embed(
+                title="❌ Error",
+                description="Failed to disable map enforcement. Please check logs for details.",
+                color=discord.Color.red()
+            ),
+            ephemeral=True
+        )
+
 @tree.command(name="help", description="Show this help message")
 async def help_command(interaction: discord.Interaction):
     logger.info(f"[/help] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -300,40 +456,51 @@ async def help_command(interaction: discord.Interaction):
         "/curscheduledtime - Show current scheduled job times and ping values\n"
         "/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
         "/online - Check if bot and API are running\n"
+        "/voteEnforceMap - Enforce a specific map to show up each time in future votes\n"
+        "/voteDisableEnforce - Disable enforced map voting\n"
+        
         "/help - Show this help message"
     )
     await interaction.response.send_message(msg)
 
+
+
 # --- Bot startup ---
-# Ensure you are sending the message once the bot is ready.
+
 @client.event
 async def on_ready():
+    logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
+
     try:
         await tree.sync()
-        logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
-        logger.info(f"Synced slash commands as {client.user} (ID: {client.user.id})")
+        logger.info(f"Synced slash commands for {client.user} (ID: {client.user.id})")
 
-        # Schedule the jobs
+        # Fetch and cache maps ONCE at startup
+        await fetch_and_cache_maps()
+        logger.info("Fetched and cached map data.")
+
+        # Reschedule jobs
         reschedule_job("set_ping_job_1", config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING"))
         reschedule_job("set_ping_job_2", config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING"))
 
-        scheduler.start()
-        logger.info("Scheduler started and jobs scheduled.")
-    except Exception as e:
-        logger.error(f"Failed during on_ready: {e}")
+        if not scheduler.running:
+            scheduler.start()
+            logger.info("Scheduler started and jobs scheduled.")
 
-    try:
-        channel = client.get_channel(CHANNEL_ID)
-        if channel:
-            #await channel.send("🟢 Bot is online!")
-            logger.error("🟢 Bot is online!")
-        else:
-            logger.error("Unable to find channel.")
+        # Notify in channel
+        channel = await client.fetch_channel(CHANNEL_ID)
+        await channel.send("🟢 Bot is online!")
+        logger.info("Sent online notification to the channel.")
+
     except Exception as e:
-        logger.error(f"Failed to send online status message: {e}")
-# Django management command
+        logger.exception("Error during on_ready sequence")  # This logs full traceback
+
+
+# --- Django management command ---
+
 class Command(BaseCommand):
     help = "Starts the Discord Ping Bot"
 
     def handle(self, *args, **options):
-       client.run(DISCORD_TOKEN)
+        logger.info("Starting Discord client...")
+        client.run(DISCORD_TOKEN)
