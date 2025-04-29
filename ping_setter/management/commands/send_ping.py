@@ -117,10 +117,15 @@ def fetch_and_cache_maps() -> bool:
         return False
 
 async def map_name_autocomplete(interaction: discord.Interaction, current: str):
+    matches = [
+        pretty_name for pretty_name in cached_maps.values()
+        if current.lower() in pretty_name.lower()
+    ]
+    limited_matches = sorted(set(matches))[:25]
+
     return [
-        app_commands.Choice(name=name, value=map_id)
-        for map_id, name in cached_maps.items()
-        if current.lower() in name.lower()
+        discord.app_commands.Choice(name=match, value=match)
+        for match in limited_matches
     ]
 
 # Function to restart HLL Discord Utils
