@@ -1,4 +1,5 @@
 import json5
+import json
 import os
 import logging
 import subprocess
@@ -94,7 +95,7 @@ cached_maps = {}
 
 def fetch_and_cache_maps() -> bool:
     """
-    Fetches map data from the API and caches warfare maps.
+    Fetches map data from the API and caches warfare maps, excluding maps with 'Night' in the name.
     
     Returns:
         bool: True if successful, False otherwise.
@@ -103,11 +104,17 @@ def fetch_and_cache_maps() -> bool:
         r = requests.get(f"{API_BASE_URL}/api/get_maps", headers=HEADERS)
         r.raise_for_status()
         maps = r.json().get("result", [])
+
+        # Filter out maps that have 'Night' in the pretty_name
         warfare_maps = {
             map_data["id"]: map_data["pretty_name"]
             for map_data in maps
-            if map_data.get("game_mode") == "warfare" and map_data.get("id") and map_data.get("pretty_name")
+            if map_data.get("game_mode") == "warfare"
+            and map_data.get("id")
+            and map_data.get("pretty_name")
+            and "night" not in map_data["pretty_name"].lower()  # Exclude maps with 'Night' in the name
         }
+
         cached_maps.clear()
         cached_maps.update(warfare_maps)
         logger.info(f"Successfully cached {len(warfare_maps)} warfare maps.")
