@@ -386,7 +386,7 @@ async def online(interaction: discord.Interaction):
         await interaction.response.send_message("🟢 Bot is online, but failed to reach API.")
 
 # Slash command: /voteEnforceMap
-@tree.command(name="voteEnforceMap", description="Enforce a specific map to show up each time in future votes")
+@tree.command(name="voteenforcemap", description="Enforce a specific map to show up each time in future votes")
 @app_commands.describe(map_name="Name of the map to enforce")
 @app_commands.autocomplete(map=map_name_autocomplete)
 async def vote_enforce_map(interaction: discord.Interaction, map_name: str):
@@ -421,7 +421,7 @@ async def vote_enforce_map(interaction: discord.Interaction, map_name: str):
         )
 
 # Slash command: /voteDisableEnforce
-@tree.command(name="voteDisableEnforce", description="Disable enforced map voting")
+@tree.command(name="votedisableenforce", description="Disable enforced map voting")
 async def vote_disable_enforce(interaction: discord.Interaction):
     if disable_enforce():
         await interaction.response.send_message(
@@ -456,8 +456,8 @@ async def help_command(interaction: discord.Interaction):
         "/curscheduledtime - Show current scheduled job times and ping values\n"
         "/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
         "/online - Check if bot and API are running\n"
-        "/voteEnforceMap - Enforce a specific map to show up each time in future votes\n"
-        "/voteDisableEnforce - Disable enforced map voting\n"
+        "/voteenforcemap - Enforce a specific map to show up each time in future votes\n"
+        "/voteisableenforce - Disable enforced map voting\n"
         
         "/help - Show this help message"
     )
