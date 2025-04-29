@@ -43,7 +43,5 @@ Currently we can issue commands
 ### Links
 
 [Wiki](https://github.com/sctewa1/hll-discord-ping/wiki)
-coming soon
+Has basic installation instructions and Screenshots
 
-- [FAQ](https://github.com/sctewa1/hll-discord-pingwiki/FAQ)
-coming soon
