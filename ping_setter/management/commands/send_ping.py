@@ -138,7 +138,7 @@ async def map_name_autocomplete(interaction: discord.Interaction, current: str):
 # Function to restart HLL Discord Utils
 def restart_hll_utils():
     try:
-        subprocess.run(["/opt/ping_setter_hll/restart_hll_utils.sh"], check=True)
+        subprocess.run(["/opt/hll_discord_utils/restart_hll_utils.sh"], check=True)
         logger.info("Restarted HLL Discord Utils successfully.")
     except subprocess.CalledProcessError as e:
         logger.error(f"Failed to restart HLL Discord Utils: {e}")
@@ -155,23 +155,32 @@ def is_enforce_active():
         return False
 
 # Function to enable map enforcement
-def enable_enforce(map_name: str):
+def enable_enforce(pretty_name: str):
     try:
+        # Reverse lookup: pretty name -> map ID
+        reverse_map = {v.lower(): k for k, v in cached_maps.items()}
+        map_id = reverse_map.get(pretty_name.lower())
+
+        if not map_id:
+            logger.error(f"Could not find map ID for pretty name '{pretty_name}'")
+            return False
+
         with open(HLL_DISCORD_UTILS_CONFIG, "r") as f:
             config_data = json.load(f)
-        
+
         config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforce"] = 1
-        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforced_maps"] = [map_name]
+        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforced_maps"] = [map_id]
 
         with open(HLL_DISCORD_UTILS_CONFIG, "w") as f:
             json.dump(config_data, f, indent=4)
 
         restart_hll_utils()
-        logger.info(f"Enforced map '{map_name}' and restarted HLL Discord Utils.")
+        logger.info(f"Enforced map '{map_id}' (pretty name: '{pretty_name}') and restarted HLL Discord Utils.")
         return True
     except Exception as e:
-        logger.error(f"Failed to enforce map '{map_name}': {e}")
+        logger.error(f"Failed to enforce map '{pretty_name}': {e}")
         return False
+
 
 # Function to disable map enforcement
 def disable_enforce():
