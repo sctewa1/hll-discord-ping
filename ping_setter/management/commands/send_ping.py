@@ -138,11 +138,11 @@ async def map_name_autocomplete(interaction: discord.Interaction, current: str):
 # Function to restart HLL Discord Utils
 def restart_hll_utils():
     try:
-        subprocess.run(["/opt/hll_discord_utils/restart_hll_utils.sh"], check=True)
-        logger.info("Restarted HLL Discord Utils successfully.")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Failed to restart HLL Discord Utils: {e}")
-
+        Path("/opt/hll_discord_utils/trigger_restart").touch()
+        logger.info("Created trigger file to restart HLL Discord Utils.")
+    except Exception as e:
+        logger.error(f"Failed to create restart trigger file: {e}")
+        
 # Function to check if map enforcement is already active
 def is_enforce_active():
     try:
