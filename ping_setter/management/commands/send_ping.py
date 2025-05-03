@@ -138,7 +138,8 @@ async def map_name_autocomplete(interaction: discord.Interaction, current: str):
 # Function to restart HLL Discord Utils
 def restart_hll_utils():
     try:
-        Path("/opt/hll_discord_utils/trigger_restart").touch()
+        with open("/opt/hll_discord_utils/trigger_restart", "w") as f:
+            f.write("restart")  # Writing something to ensure a close_write event
         logger.info("Created trigger file to restart HLL Discord Utils.")
     except Exception as e:
         logger.error(f"Failed to create restart trigger file: {e}")
