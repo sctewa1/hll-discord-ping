@@ -139,9 +139,10 @@ def restart_hll_utils():
     try:
         trigger_path = "/opt/hll_discord_utils/trigger_restart"
         with open(trigger_path, "w") as f:
-            f.write("restart\n")               # Write a line of content
-            f.flush()                          # Flush Python's buffer
-            os.fsync(f.fileno())               # Flush OS-level buffer to disk
+            written = f.write("restart\n")
+            f.flush()
+            os.fsync(f.fileno())
+            logger.info(f"Wrote {written} bytes to trigger file.")
         logger.info("Created trigger file to restart HLL Discord Utils.")
     except Exception as e:
         logger.error(f"Failed to create restart trigger file: {e}")
