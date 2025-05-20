@@ -362,8 +362,10 @@ async def banplayer(interaction: discord.Interaction, name_prefix: str):
                         r.raise_for_status()
 
                         await modal_interaction.response.send_message(
-                            f"✅ Successfully banned `{player_name}` for reason: '{self.reason.value}'."
-                            ephemeral=True
+                            await modal_interaction.response.send_message(
+    f"✅ Successfully banned `{player_name}` for reason: '{self.reason.value}'.",
+    ephemeral=True
+)ephemeral=True
                         )
 
                         logger.info(f"{interaction.user.name} (ID: {interaction.user.id}) banned {player_name} (ID: {player_id}) for '{self.reason.value}'")
