@@ -303,14 +303,13 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
 
 # --- Slash commands ---
 
-
 from datetime import datetime
 import discord.ui
 
 @tree.command(name="banplayer", description="Ban a live player by name prefix")
-@app_commands.describe(name_prefix="Start of the player name", reason="Reason for ban")
-async def banplayer(interaction: discord.Interaction, name_prefix: str, reason: str = "Manual ban via Discord"):
-    logger.info(f"[/banplayer] Requested by {interaction.user} (ID: {interaction.user.id}) - prefix: {name_prefix}, reason: {reason}")
+@app_commands.describe(name_prefix="Start of the player name")
+async def banplayer(interaction: discord.Interaction, name_prefix: str):
+    logger.info(f"[/banplayer] Requested by {interaction.user} (ID: {interaction.user.id}) - prefix: {name_prefix}")
     await interaction.response.defer(ephemeral=True)
 
     try:
@@ -344,43 +343,45 @@ async def banplayer(interaction: discord.Interaction, name_prefix: str, reason: 
 
         async def callback(self, interaction_select: discord.Interaction):
             player_id = self.values[0]
-            await handle_ban(player_id, interaction_select)
+            player_name = next((n for n, pid in filtered if pid == player_id), "Unknown")
+
+            class ReasonModal(discord.ui.Modal, title=f"Ban Reason for {player_name}"):
+                reason = discord.ui.TextInput(label="Reason", placeholder="Enter reason for ban", required=True)
+
+                async def on_submit(self, modal_interaction: discord.Interaction):
+                    payload = {
+                        "player_id": player_id,
+                        "blacklist_id": 0,
+                        "reason": self.reason.value,
+                        "expires_at": "2033-01-01T00:00:00",
+                        "admin_name": "discordBot"
+                    }
+
+                    try:
+                        r = requests.post(f"{API_BASE_URL}/api/add_blacklist_record", headers=HEADERS, json=payload)
+                        r.raise_for_status()
+
+                        await modal_interaction.response.send_message(
+                            f"✅ Successfully banned `{player_name}` for reason: "{self.reason.value}".",
+                            ephemeral=True
+                        )
+
+                        logger.info(f"{interaction.user.name} (ID: {interaction.user.id}) banned {player_name} (ID: {player_id}) for '{self.reason.value}'")
+
+                        channel = await client.fetch_channel(CHANNEL_ID)
+                        if channel:
+                            await channel.send(f"👮 `{interaction.user.name}` banned `{player_name}` for reason: "{self.reason.value}"")
+
+                    except Exception as e:
+                        logger.error(f"Ban failed for player_id {player_id}: {e}")
+                        await modal_interaction.response.send_message("❌ Failed to ban player.", ephemeral=True)
+
+            await interaction_select.response.send_modal(ReasonModal())
 
     class PlayerView(discord.ui.View):
         def __init__(self):
             super().__init__(timeout=30)
             self.add_item(PlayerDropdown())
-
-    async def handle_ban(player_id: str, interaction_select: discord.Interaction):
-        player_name = next((name for name, pid in filtered if pid == player_id), "Unknown")
-        payload = {
-            "player_id": player_id,
-            "blacklist_id": 0,
-            "reason": reason,
-            "expires_at": "2033-01-01T00:00:00",
-            "admin_name": "discordBot"
-        }
-
-        try:
-            r = requests.post(f"{API_BASE_URL}/api/add_blacklist_record", headers=HEADERS, json=payload)
-            r.raise_for_status()
-
-            await interaction_select.followup.send(
-                f"✅ Successfully banned `{player_name}` for reason: \"{reason}\".",
-                ephemeral=True
-            )
-
-            logger.info(f"{interaction.user.name} (ID: {interaction.user.id}) banned {player_name} (ID: {player_id}) for '{reason}'")
-
-            channel = await client.fetch_channel(CHANNEL_ID)
-            if channel:
-                await channel.send(
-                    f"👮 `{interaction.user.name}` banned `{player_name}` for reason: \"{reason}\""
-                )
-
-        except Exception as e:
-            logger.error(f"Ban failed for player_id {player_id}: {e}")
-            await interaction_select.followup.send("❌ Failed to ban player.", ephemeral=True)
 
     await interaction.followup.send("Select the player to ban:", view=PlayerView())
 
