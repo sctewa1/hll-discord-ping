@@ -558,7 +558,7 @@ async def help_command(interaction: discord.Interaction):
         "Welcome to the HLL command tool!\n\n"
         "📜 **List of Commands:**\n"
         "/banplayer - Ban a live player, input start of name hit enter, select player, then a reason to show the player this is for 8 YEARS\n"
-	"/tempban- Ban a live player, input start of name hit enter, select player, then how many HOURS and a reason to show the player\n"
+	"/bantemp- Ban a live player, input start of name hit enter, select player, then how many HOURS and a reason to show the player\n"
         "/bans - Show recent bans\n"
         "/unban - Unban a player from recent bans\n"
         "/curping - Show current max ping autokick value\n"
