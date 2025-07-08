@@ -566,6 +566,7 @@ async def help_command(interaction: discord.Interaction):
         "/curscheduledtime - Show current scheduled job times and ping values\n"
         "/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
         "/online - Check if bot and API are running\n\n"
+	"/showvips - Display a paginated list of temporary VIPs and how long they have left\n"
         "/xxvoteenforcemap - **NOT READY***Enforce a specific map to show up each time in future votes\n"
         "/xxvoteisableenforce - **NOT READY**Disable enforced map voting\n"
         
