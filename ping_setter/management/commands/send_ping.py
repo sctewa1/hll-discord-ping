@@ -664,8 +664,12 @@ async def show_vips(interaction: discord.Interaction):
     logger.info(f"[/showvips] Requested by {interaction.user} (ID: {interaction.user.id})")
     await interaction.response.defer()
 
+    vip_url = f"{API_BASE_URL}/api/get_vip_ids"
+
     try:
-        data = await call_api("get_vip_ids", method="GET")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(vip_url, headers=HEADERS) as resp:
+                data = await resp.json()
     except Exception as e:
         logger.error(f"Failed to fetch VIP data: {e}")
         return await interaction.followup.send("❌ Error fetching VIP data.")
@@ -736,7 +740,6 @@ async def show_vips(interaction: discord.Interaction):
                     await interaction_.response.edit_message(embed=pages[self.page], view=self)
 
         await interaction.followup.send(embed=pages[0], view=Paginator())
-
 
 # --- Bot startup ---
 
