@@ -675,7 +675,8 @@ async def show_vips(interaction: discord.Interaction):
         logger.error(f"Failed to fetch VIP data: {e}")
         return await interaction.followup.send("❌ Error fetching VIP data.")
 
-    now = datetime.now(timezone.utc)
+    from datetime import timezone as dt_timezone
+    now = datetime.now(dt_timezone.utc)
     vip_entries = []
 
     for entry in data.get("result", []):
