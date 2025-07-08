@@ -4,6 +4,7 @@ import os
 import logging
 import subprocess
 import requests
+import aiohttp
 from pathlib import Path
 from discord import Embed
 
