@@ -658,6 +658,88 @@ async def bantemp(interaction: discord.Interaction, name_prefix: str):
 
     await interaction.followup.send("Select the player to temp-ban:", view=PlayerView())
 
+@tree.command(name="showvips", description="Show all temporary VIPs by time remaining")
+async def show_vips(interaction: discord.Interaction):
+    logger.info(f"[/showvips] Requested by {interaction.user} (ID: {interaction.user.id})")
+    await interaction.response.defer()
+
+    vip_url = f"{API_BASE_URL}/api/get_vip_ids"
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(vip_url, headers=HEADERS) as resp:
+                data = await resp.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch VIP data: {e}")
+        return await interaction.followup.send("❌ Error fetching VIP data.")
+
+    now = datetime.now(timezone.utc)
+    vip_entries = []
+
+    for entry in data.get("result", []):
+        vip_exp = entry.get("vip_expiration")
+        if vip_exp == "3000-01-01T00:00:00+00:00":
+            continue  # skip permanent VIPs
+        try:
+            expires_at = datetime.fromisoformat(vip_exp)
+            if expires_at > now:
+                delta = expires_at - now
+                name = entry["name"].replace(" - CRCON Seed VIP", "")
+                vip_entries.append((name, delta))
+        except Exception:
+            continue
+
+    if not vip_entries:
+        await interaction.followup.send("⚠️ No temporary VIPs found.")
+        return
+
+    # Sort by longest remaining time
+    vip_entries.sort(key=lambda x: x[1], reverse=True)
+
+    def format_duration(delta):
+        days = delta.days
+        hours, remainder = divmod(delta.seconds, 3600)
+        minutes = remainder // 60
+        return f"{days}d {hours}h {minutes}m"
+
+    def format_line(name, delta):
+        return f"⏰ {name} → `{format_duration(delta)}`"
+
+    pages = []
+    per_page = 20
+    for i in range(0, len(vip_entries), per_page):
+        chunk = vip_entries[i:i+per_page]
+        description = "\n".join(format_line(name, delta) for name, delta in chunk)
+        embed = discord.Embed(
+            title="🧾 Temporary VIPs (Longest to Shortest)",
+            description=description,
+            color=discord.Color.teal()
+        )
+        embed.set_footer(text=f"{i + 1}–{min(i + per_page, len(vip_entries))} of {len(vip_entries)}")
+        pages.append(embed)
+
+    if len(pages) == 1:
+        await interaction.followup.send(embed=pages[0])
+    else:
+        class Paginator(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=120)
+                self.page = 0
+
+            @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary)
+            async def back(self, interaction_: discord.Interaction, _):
+                if self.page > 0:
+                    self.page -= 1
+                    await interaction_.response.edit_message(embed=pages[self.page], view=self)
+
+            @discord.ui.button(label="▶️", style=discord.ButtonStyle.secondary)
+            async def forward(self, interaction_: discord.Interaction, _):
+                if self.page < len(pages) - 1:
+                    self.page += 1
+                    await interaction_.response.edit_message(embed=pages[self.page], view=self)
+
+        await interaction.followup.send(embed=pages[0], view=Paginator())
+
 # --- Bot startup ---
 
 @client.event
