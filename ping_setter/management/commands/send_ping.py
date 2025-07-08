@@ -14,6 +14,13 @@ from discord.ext import commands
 from discord import app_commands
 from django.core.management.base import BaseCommand
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+def admin_in_hq4_only():
+    def predicate(interaction: discord.Interaction):
+        allowed_roles = ("Admin", "Moderator", "hq4role")
+        is_hq4 = interaction.channel.name == "hq4"
+        has_role = any(role.name in allowed_roles for role in interaction.user.roles)
+        return is_hq4 and has_role
+    return app_commands.check(predicate)
 from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from .logging_config import setup_logging
@@ -306,6 +313,7 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
 from datetime import datetime
 import discord.ui
 
+    @admin_in_hq4_only()
 @tree.command(name="banplayer", description="Ban a live player by name prefix")
 @app_commands.describe(name_prefix="Start of the player name")
 async def banplayer(interaction: discord.Interaction, name_prefix: str):
@@ -386,6 +394,7 @@ async def banplayer(interaction: discord.Interaction, name_prefix: str):
     await interaction.followup.send("Select the player to ban:", view=PlayerView())
 
 
+    @admin_in_hq4_only()
 @tree.command(name="curping", description="Show current max ping autokick")
 async def curping(interaction: discord.Interaction):
     logger.info(f"[/curping] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -395,6 +404,7 @@ async def curping(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("⚠️ Could not fetch current ping.")
 
+    @admin_in_hq4_only()
 @tree.command(name="setping", description="Set max ping autokick")
 @app_commands.describe(ping="Ping in ms")
 async def setping(interaction: discord.Interaction, ping: int):
@@ -406,6 +416,7 @@ async def setping(interaction: discord.Interaction, ping: int):
     else:
         await interaction.response.send_message("❌ Failed to set ping.")
 
+    @admin_in_hq4_only()
 @tree.command(name="curscheduledtime", description="Show scheduled jobs and pings")
 async def curscheduledtime(interaction: discord.Interaction):
     logger.info(f"[/curscheduledtime] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -415,6 +426,7 @@ async def curscheduledtime(interaction: discord.Interaction):
            f"🕒 Job 2: {t2[:2]}:{t2[2:]} @ {p2}ms")
     await interaction.response.send_message(msg)
 
+    @admin_in_hq4_only()
 @tree.command(name="setscheduledtime", description="Set scheduled job time and ping")
 @app_commands.describe(job="Job number (1 or 2)", time="Time HHMM", ping="Ping in ms")
 async def setscheduledtime(interaction: discord.Interaction, job: int, time: str, ping: int):
@@ -433,6 +445,7 @@ async def setscheduledtime(interaction: discord.Interaction, job: int, time: str
     else:
         await interaction.response.send_message("⚠️ Invalid job number (1 or 2).")
 
+    @admin_in_hq4_only()
 @tree.command(name="bans", description="Show last 5 temp bans")
 async def bans(interaction: discord.Interaction):
     logger.info(f"[/bans] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -458,6 +471,7 @@ async def bans(interaction: discord.Interaction):
     # Send the list of temp bans
     await interaction.response.send_message("**Last 5 Temp Bans:**\n" + "\n".join(lines))
 
+    @admin_in_hq4_only()
 @tree.command(name="unban", description="Unban player by ban number from the last /bans list")
 @app_commands.describe(index="Ban number from the /bans list (1-5)")
 async def unban(interaction: discord.Interaction, index: int):
@@ -485,6 +499,7 @@ async def unban(interaction: discord.Interaction, index: int):
         logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
 
 
+    @admin_in_hq4_only()
 @tree.command(name="online", description="Check if bot and API are running")
 async def online(interaction: discord.Interaction):
     logger.info(f"[/online] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -495,6 +510,7 @@ async def online(interaction: discord.Interaction):
         await interaction.response.send_message("🟢 Bot is online, but failed to reach API.")
 
 # Slash command: /voteEnforceMap
+    @admin_in_hq4_only()
 @tree.command(name="voteenforcemap", description="Enforce a specific map to show up each time in future votes")
 @app_commands.describe(map_name="Name of the map to enforce")
 @app_commands.autocomplete(map_name=map_name_autocomplete)  # Use map_name here instead of map
@@ -530,6 +546,7 @@ async def vote_enforce_map(interaction: discord.Interaction, map_name: str):  # 
         )
 
 # Slash command: /voteDisableEnforce
+    @admin_in_hq4_only()
 @tree.command(name="votedisableenforce", description="Disable enforced map voting")
 async def vote_disable_enforce(interaction: discord.Interaction):
     if disable_enforce():
@@ -551,6 +568,7 @@ async def vote_disable_enforce(interaction: discord.Interaction):
             ephemeral=True
         )
 
+    @admin_in_hq4_only()
 @tree.command(name="help", description="Show this help message")
 async def help_command(interaction: discord.Interaction):
     logger.info(f"[/help] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -577,6 +595,7 @@ async def help_command(interaction: discord.Interaction):
 
 
 
+    @admin_in_hq4_only()
 @tree.command(name="bantemp", description="Temporarily ban a live player by name prefix")
 @app_commands.describe(name_prefix="Start of the player name")
 async def bantemp(interaction: discord.Interaction, name_prefix: str):
@@ -660,6 +679,7 @@ async def bantemp(interaction: discord.Interaction, name_prefix: str):
 
     await interaction.followup.send("Select the player to temp-ban:", view=PlayerView())
 
+    @admin_in_hq4_only()
 @tree.command(name="showvips", description="Show all temporary VIPs by time remaining")
 async def show_vips(interaction: discord.Interaction):
     logger.info(f"[/showvips] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -722,7 +742,7 @@ async def show_vips(interaction: discord.Interaction):
         pages.append(embed)
 
     if len(pages) == 1:
-        await interaction.followup.send(embed=pages[0])
+        await interaction.followup.send(embed=pages[0], ephemeral=True)
     else:
         class Paginator(discord.ui.View):
             def __init__(self):
@@ -746,7 +766,7 @@ async def show_vips(interaction: discord.Interaction):
                     await interaction_.response.edit_message(embed=pages[self.page], view=self)
 
         view = Paginator()
-        await interaction.followup.send(embed=pages[0], view=view)
+        await interaction.followup.send(embed=pages[0], view=view, ephemeral=True)
         view.message = await interaction.original_response()
 
 # --- Bot startup ---
