@@ -725,13 +725,13 @@ async def show_vips(interaction: discord.Interaction):
         await interaction.followup.send(embed=pages[0])
     else:
         class Paginator(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=120)
-        self.page = 0
-        self.message = None  # Will hold the message object
+            def __init__(self):
+                super().__init__(timeout=120)
+                self.page = 0
+                self.message = None  # Will hold the message object
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        return True  # ✅ Allow anyone to interact
+            async def interaction_check(self, interaction: discord.Interaction) -> bool:
+                return True  # ✅ Allow anyone to interact
 
             @discord.ui.button(label="◀️", style=discord.ButtonStyle.secondary)
             async def back(self, interaction_: discord.Interaction, _):
