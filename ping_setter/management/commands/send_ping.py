@@ -104,7 +104,7 @@ cached_maps = {}
 def fetch_and_cache_maps() -> bool:
     """
     Fetches map data from the API and caches warfare maps, excluding maps with 'Night' in the name.
-    
+
     Returns:
         bool: True if successful, False otherwise.
     """
@@ -154,7 +154,7 @@ def restart_hll_utils():
         logger.info("Created trigger file to restart HLL Discord Utils.")
     except Exception as e:
         logger.error(f"Failed to create restart trigger file: {e}")
-        
+
 # Function to check if map enforcement is already active
 def is_enforce_active():
     try:
@@ -199,7 +199,7 @@ def disable_enforce():
     try:
         with open(HLL_DISCORD_UTILS_CONFIG, "r") as f:
             config_data = json.load(f)
-        
+
         config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforce"] = 0
         config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforced_maps"] = []
 
@@ -313,7 +313,7 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
 from datetime import datetime
 import discord.ui
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="banplayer", description="Ban a live player by name prefix")
 @app_commands.describe(name_prefix="Start of the player name")
 async def banplayer(interaction: discord.Interaction, name_prefix: str):
@@ -394,7 +394,7 @@ async def banplayer(interaction: discord.Interaction, name_prefix: str):
     await interaction.followup.send("Select the player to ban:", view=PlayerView())
 
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="curping", description="Show current max ping autokick")
 async def curping(interaction: discord.Interaction):
     logger.info(f"[/curping] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -404,7 +404,7 @@ async def curping(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("⚠️ Could not fetch current ping.")
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="setping", description="Set max ping autokick")
 @app_commands.describe(ping="Ping in ms")
 async def setping(interaction: discord.Interaction, ping: int):
@@ -416,7 +416,7 @@ async def setping(interaction: discord.Interaction, ping: int):
     else:
         await interaction.response.send_message("❌ Failed to set ping.")
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="curscheduledtime", description="Show scheduled jobs and pings")
 async def curscheduledtime(interaction: discord.Interaction):
     logger.info(f"[/curscheduledtime] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -426,7 +426,7 @@ async def curscheduledtime(interaction: discord.Interaction):
            f"🕒 Job 2: {t2[:2]}:{t2[2:]} @ {p2}ms")
     await interaction.response.send_message(msg)
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="setscheduledtime", description="Set scheduled job time and ping")
 @app_commands.describe(job="Job number (1 or 2)", time="Time HHMM", ping="Ping in ms")
 async def setscheduledtime(interaction: discord.Interaction, job: int, time: str, ping: int):
@@ -445,23 +445,23 @@ async def setscheduledtime(interaction: discord.Interaction, job: int, time: str
     else:
         await interaction.response.send_message("⚠️ Invalid job number (1 or 2).")
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="bans", description="Show last 5 temp bans")
 async def bans(interaction: discord.Interaction):
     logger.info(f"[/bans] Requested by {interaction.user} (ID: {interaction.user.id})")
-    
+
     # Fetch recent bans
     data = get_recent_bans()
-    
+
     # Ensure that data is in list format and filter only temp bans with valid player_id
     temp_bans = [
         b for b in data if b.get("type") == "temp" and b.get("player_id") is not None
     ]
-    
+
     # Check if there are any temp bans
     if not temp_bans:
         return await interaction.response.send_message("⚠️ No temp bans found.")
-    
+
     # Create list of temp bans (we only want the last 5)
     lines = []
     for i, b in enumerate(temp_bans[:5]):  # Only show the last 5 bans
@@ -471,12 +471,12 @@ async def bans(interaction: discord.Interaction):
     # Send the list of temp bans
     await interaction.response.send_message("**Last 5 Temp Bans:**\n" + "\n".join(lines))
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="unban", description="Unban player by ban number from the last /bans list")
 @app_commands.describe(index="Ban number from the /bans list (1-5)")
 async def unban(interaction: discord.Interaction, index: int):
     logger.info(f"[/unban] Requested by {interaction.user} (ID: {interaction.user.id}), index: {index}")
- 
+
     data = get_recent_bans()
     if not data:
         await interaction.response.send_message("⚠️ No bans to unban.")
@@ -499,7 +499,7 @@ async def unban(interaction: discord.Interaction, index: int):
         logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
 
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="online", description="Check if bot and API are running")
 async def online(interaction: discord.Interaction):
     logger.info(f"[/online] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -510,7 +510,7 @@ async def online(interaction: discord.Interaction):
         await interaction.response.send_message("🟢 Bot is online, but failed to reach API.")
 
 # Slash command: /voteEnforceMap
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="voteenforcemap", description="Enforce a specific map to show up each time in future votes")
 @app_commands.describe(map_name="Name of the map to enforce")
 @app_commands.autocomplete(map_name=map_name_autocomplete)  # Use map_name here instead of map
@@ -546,7 +546,7 @@ async def vote_enforce_map(interaction: discord.Interaction, map_name: str):  # 
         )
 
 # Slash command: /voteDisableEnforce
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="votedisableenforce", description="Disable enforced map voting")
 async def vote_disable_enforce(interaction: discord.Interaction):
     if disable_enforce():
@@ -568,7 +568,7 @@ async def vote_disable_enforce(interaction: discord.Interaction):
             ephemeral=True
         )
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="help", description="Show this help message")
 async def help_command(interaction: discord.Interaction):
     logger.info(f"[/help] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -588,14 +588,14 @@ async def help_command(interaction: discord.Interaction):
 	"/showvips - Display a paginated list of temporary VIPs and how long they have left\n"
         "/xxvoteenforcemap - **NOT READY***Enforce a specific map to show up each time in future votes\n"
         "/xxvoteisableenforce - **NOT READY**Disable enforced map voting\n"
-        
+
         "/help - Show this help message"
     )
     await interaction.response.send_message(msg)
 
 
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="bantemp", description="Temporarily ban a live player by name prefix")
 @app_commands.describe(name_prefix="Start of the player name")
 async def bantemp(interaction: discord.Interaction, name_prefix: str):
@@ -679,7 +679,7 @@ async def bantemp(interaction: discord.Interaction, name_prefix: str):
 
     await interaction.followup.send("Select the player to temp-ban:", view=PlayerView())
 
-    @admin_in_hq4_only()
+@admin_in_hq4_only()
 @tree.command(name="showvips", description="Show all temporary VIPs by time remaining")
 async def show_vips(interaction: discord.Interaction):
     logger.info(f"[/showvips] Requested by {interaction.user} (ID: {interaction.user.id})")
