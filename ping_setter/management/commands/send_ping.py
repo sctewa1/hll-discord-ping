@@ -71,17 +71,17 @@ HLL_DISCORD_UTILS_DIR =  config.get("HLL_DISCORD_UTILS_DIR")
 DB_URL           = config.get("DB_URL")
 
 if not DISCORD_TOKEN or CHANNEL_ID is None or not API_BASE_URL or not API_BEARER_TOKEN:
-    raise ValueError("Essential configuration missing in config.jsonc")
+raise ValueError("Essential configuration missing in config.jsonc")
 
 # Prepare headers for API calls
 HEADERS = {
-    "Authorization": f"Bearer {API_BEARER_TOKEN}",
-    "Content-Type": "application/json"
+"Authorization": f"Bearer {API_BEARER_TOKEN}",
+"Content-Type": "application/json"
 }
 
 # Scheduler timezone
 tz_name = config.get("TIMEZONE", "Australia/Sydney")
-    tz = timezone("Australia/Sydney")
+tz = timezone("Australia/Sydney")
 scheduler = AsyncIOScheduler(timezone=tz)
 
 # SQLAlchemy DB engine
@@ -414,26 +414,26 @@ async def bans(interaction: discord.Interaction):
     await interaction.response.send_message("**Last 5 Temp Bans:**\n" + "\n".join(lines))
 
 @tree.command(name="unban", description="Unban player by ban number from the last /bans list")
-    data = get_recent_bans()
-    if not data:
-        await interaction.response.send_message("⚠️ No bans to unban.")
-        logger.info(f"User `{interaction.user.name}` attempted to unban a player, but no bans were found.")
-        return
+data = get_recent_bans()
+if not data:
+await interaction.response.send_message("⚠️ No bans to unban.")
+logger.info(f"User `{interaction.user.name}` attempted to unban a player, but no bans were found.")
+return
 
-    if 1 <= index <= len(data):
-        player_id = data[index - 1]["player_id"]
-        name = get_player_name(player_id)
-        success = unban_player(player_id)
+if 1 <= index <= len(data):
+player_id = data[index - 1]["player_id"]
+name = get_player_name(player_id)
+success = unban_player(player_id)
 
-        if success:
-            await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
-            logger.info(f"User `{interaction.user.name}` successfully unbanned player `{name}` (ID: `{player_id}`)")
-        else:
-            await interaction.response.send_message("❌ Failed to unban player.")
-            logger.error(f"User `{interaction.user.name}` failed to unban player `{name}` (ID: `{player_id}`).")
-    else:
-        await interaction.response.send_message("⚠️ Invalid ban index.")
-        logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
+if success:
+await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
+logger.info(f"User `{interaction.user.name}` successfully unbanned player `{name}` (ID: `{player_id}`)")
+else:
+await interaction.response.send_message("❌ Failed to unban player.")
+logger.error(f"User `{interaction.user.name}` failed to unban player `{name}` (ID: `{player_id}`).")
+else:
+await interaction.response.send_message("⚠️ Invalid ban index.")
+logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
 
 
 @tree.command(name="online", description="Check if bot and API are running")
@@ -508,42 +508,42 @@ async def help_command(interaction: discord.Interaction):
         "Welcome to the HLL command tool!\n\n"
         "📜 **List of Commands:**\n"
         "/banplayer - Ban a live player, input start of name hit enter, select player, then a reason to show the player this is for 8 YEARS\n"
-	"/bantemp- Ban a live player, input start of name hit enter, select player, then how many HOURS and a reason to show the player\n"
-        "/bans - Show recent bans\n"
-        "/unban - Unban a player from recent bans\n"
-        "/curping - Show current max ping autokick value\n"
-        "/setping - Set max ping autokick value (in ms)\n"
-        "/curscheduledtime - Show current scheduled job times and ping values\n"
-        "/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
-        "/online - Check if bot and API are running\n\n"
-	"/showvips - Display a paginated list of temporary VIPs and how long they have left\n"
-        "/xxvoteenforcemap - **NOT READY***Enforce a specific map to show up each time in future votes\n"
-        "/xxvoteisableenforce - **NOT READY**Disable enforced map voting\n"
+"/bantemp- Ban a live player, input start of name hit enter, select player, then how many HOURS and a reason to show the player\n"
+"/bans - Show recent bans\n"
+"/unban - Unban a player from recent bans\n"
+"/curping - Show current max ping autokick value\n"
+"/setping - Set max ping autokick value (in ms)\n"
+"/curscheduledtime - Show current scheduled job times and ping values\n"
+"/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
+"/online - Check if bot and API are running\n\n"
+"/showvips - Display a paginated list of temporary VIPs and how long they have left\n"
+"/xxvoteenforcemap - **NOT READY***Enforce a specific map to show up each time in future votes\n"
+"/xxvoteisableenforce - **NOT READY**Disable enforced map voting\n"
         
-        "/help - Show this help message"
-    )
-    await interaction.response.send_message(msg)
+"/help - Show this help message"
+)
+await interaction.response.send_message(msg)
 
 
 
 @tree.command(name="bantemp", description="Temporarily ban a live player by name prefix")
-        r.raise_for_status()
-        stats = r.json().get("result", {}).get("stats", [])
-        await interaction.followup.send("❌ Error fetching live scoreboard.")
-        return
+r.raise_for_status()
+stats = r.json().get("result", {}).get("stats", [])
+await interaction.followup.send("❌ Error fetching live scoreboard.")
+return
 
-    filtered = [
-        (p["player"], p["player_id"]) for p in stats
-        if p.get("player", "").lower().startswith(name_prefix.lower())
-    ]
+filtered = [
+(p["player"], p["player_id"]) for p in stats
+if p.get("player", "").lower().startswith(name_prefix.lower())
+]
 
-    if not filtered:
-        await interaction.followup.send("⚠️ No players found with that prefix.")
-        return
+if not filtered:
+await interaction.followup.send("⚠️ No players found with that prefix.")
+return
 
-    if len(filtered) > 25:
-        await interaction.followup.send("⚠️ Too many matches. Please narrow your prefix.")
-        return
+if len(filtered) > 25:
+await interaction.followup.send("⚠️ Too many matches. Please narrow your prefix.")
+return
 
     class PlayerDropdown(discord.ui.Select):
         def __init__(self):
