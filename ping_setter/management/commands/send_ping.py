@@ -18,6 +18,8 @@ from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from .logging_config import setup_logging
 
+from sqlalchemy import text, create_engine
+
 # Absolute path to config.jsonc inside the container.
 CONFIG_PATH = "/opt/ping_setter_hll/config.jsonc"
 
@@ -61,10 +63,12 @@ config = load_config()
 # Required settings
 DISCORD_TOKEN    = config.get("DISCORD_TOKEN")
 CHANNEL_ID       = config.get("CHANNEL_ID")
+CHANNEL_ID_STATS = config.get("CHANNEL_ID_stats")
 API_BASE_URL     = config.get("API_BASE_URL")
 API_BEARER_TOKEN = config.get("API_BEARER_TOKEN")
 HLL_DISCORD_UTILS_CONFIG = config.get("HLL_DISCORD_UTILS_CONFIG")
 HLL_DISCORD_UTILS_DIR =  config.get("HLL_DISCORD_UTILS_DIR")
+DB_URL           = config.get("DB_URL")
 
 if not DISCORD_TOKEN or CHANNEL_ID is None or not API_BASE_URL or not API_BEARER_TOKEN:
     raise ValueError("Essential configuration missing in config.jsonc")
@@ -84,6 +88,9 @@ except Exception:
     tz = timezone("Australia/Sydney")
 scheduler = AsyncIOScheduler(timezone=tz)
 
+# SQLAlchemy DB engine
+engine = create_engine(DB_URL)
+
 # Discord bot setup (only slash commands)
 intents = discord.Intents.default()
 intents.message_content = False
@@ -97,15 +104,12 @@ cached_maps = {}
 def fetch_and_cache_maps() -> bool:
     """
     Fetches map data from the API and caches warfare maps, excluding maps with 'Night' in the name.
-    
-    Returns:
-        bool: True if successful, False otherwise.
+    Returns: True if successful, False otherwise.
     """
     try:
         r = requests.get(f"{API_BASE_URL}/api/get_maps", headers=HEADERS)
         r.raise_for_status()
         maps = r.json().get("result", [])
-
         # Filter out maps that have 'Night' in the pretty_name
         warfare_maps = {
             map_data["id"]: map_data["pretty_name"]
@@ -113,9 +117,8 @@ def fetch_and_cache_maps() -> bool:
             if map_data.get("game_mode") == "warfare"
             and map_data.get("id")
             and map_data.get("pretty_name")
-            and "night" not in map_data["pretty_name"].lower()  # Exclude maps with 'Night' in the name
+            and "night" not in map_data["pretty_name"].lower()
         }
-
         cached_maps.clear()
         cached_maps.update(warfare_maps)
         logger.info(f"Successfully cached {len(warfare_maps)} warfare maps.")
@@ -130,7 +133,6 @@ async def map_name_autocomplete(interaction: discord.Interaction, current: str):
         if current.lower() in pretty_name.lower()
     ]
     limited_matches = sorted(set(matches))[:25]
-
     return [
         discord.app_commands.Choice(name=match, value=match)
         for match in limited_matches
@@ -707,55 +709,22 @@ async def show_vips(interaction: discord.Interaction):
         await interaction.followup.send(embed=pages[0], view=view)
         view.message = await interaction.original_response()
 
-# --- Bot startup ---
+@tree.command(name="playerstats", description="Show all-time stats for a player by name")
+@app_commands.describe(player_name="All or part of the player's name")
+async def playerstats(interaction: discord.Interaction, player_name: str):
+    logger.info(f"[/playerstats] Requested by {interaction.user} (ID: {interaction.user.id}), search: {player_name}")
 
-@client.event
-async def on_ready():
-    logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
-
-    try:
-        await tree.sync()
-        logger.info(f"Synced slash commands for {client.user} (ID: {client.user.id})")
-
-        # Fetch and cache maps ONCE at startup
-        fetch_and_cache_maps()
-        logger.info("Fetched and cached map data.")
-
-        # Reschedule jobs
-        reschedule_job("set_ping_job_1", config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING"))
-        reschedule_job("set_ping_job_2", config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING"))
-
-        if not scheduler.running:
-            scheduler.start()
-            logger.info("Scheduler started and jobs scheduled.")
-
-        # Notify in channel
-        channel = await client.fetch_channel(CHANNEL_ID)
-        await channel.send("🟢 Bot is online!")
-        logger.info("Sent online notification to the channel.")
-
-    except Exception as e:
-        logger.exception("Error during on_ready sequence")  # This logs full traceback
-
-
-# --- Django management command ---
-
-class Command(BaseCommand):
-    help = "Starts the Discord Ping Bot"
-
-    def handle(self, *args, **options):
-        logger.info("Starting Discord client...")
-        client.run(DISCORD_TOKEN)
-
-    if interaction.channel.id != config.get("CHANNEL_ID_stats"):
+    # Restrict to stats channel only
+    if interaction.channel.id != CHANNEL_ID_STATS:
         await interaction.response.send_message(
             "This command can only be used in the stats channel.", ephemeral=True
         )
         return
 
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
 
     try:
+        # Search for up to 20 close matches by name (case-insensitive)
         with engine.connect() as conn:
             query = text("""
                 SELECT DISTINCT ON (pn.playersteamid_id)
@@ -771,7 +740,7 @@ class Command(BaseCommand):
             await interaction.followup.send("No matching players found.")
             return
 
-        choices = [
+        options = [
             discord.SelectOption(label=row.name[:100], value=str(row.playersteamid_id))
             for row in results
         ]
@@ -779,10 +748,9 @@ class Command(BaseCommand):
         class PlayerSelect(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=30)
-
                 self.select = discord.ui.Select(
                     placeholder="Select a player",
-                    options=choices,
+                    options=options,
                     min_values=1,
                     max_values=1,
                 )
@@ -800,11 +768,11 @@ class Command(BaseCommand):
                     stats = conn.execute(stats_query, {"steam_id": steam_id}).fetchone()
 
                 if not stats:
-                    await select_interaction.response.send_message("No stats found for this player.")
+                    await select_interaction.response.send_message("No stats found for this player.", ephemeral=True)
                     return
 
                 await select_interaction.response.send_message(
-                    f"**Stats for <{steam_id}>:**\n"
+                    f"**Stats for `{steam_id}`:**\n"
                     f"Kills: {stats.kills}\n"
                     f"Deaths: {stats.deaths}\n"
                     f"KDR: {stats.kdr:.2f if stats.kdr is not None else 0}\n"
@@ -812,10 +780,9 @@ class Command(BaseCommand):
                     f"Death Streak: {stats.death_streak}\n"
                     f"Matches Played: {stats.matches_played}\n"
                     f"Wins: {stats.win_count}\n"
-                    f"Losses: {stats.loss_count}"
+                    f"Losses: {stats.loss_count}",
+                    ephemeral=True
                 )
-
-                # Log the usage
                 logger.info(
                     f"/playerstats used by {interaction.user.display_name} ({interaction.user.id}) "
                     f"for Steam ID {steam_id}"
@@ -825,4 +792,35 @@ class Command(BaseCommand):
 
     except Exception as e:
         logger.exception("Error in /playerstats command")
-        await interaction.followup.send("An error occurred while processing your request.")
+        await interaction.followup.send("An error occurred while processing your request.", ephemeral=True)
+
+# --- Bot startup ---
+@client.event
+async def on_ready():
+    logger.info(f"Bot logged in as {client.user} (ID: {client.user.id})")
+    try:
+        await tree.sync()
+        logger.info(f"Synced slash commands for {client.user} (ID: {client.user.id})")
+        # Fetch and cache maps ONCE at startup
+        fetch_and_cache_maps()
+        logger.info("Fetched and cached map data.")
+        # Reschedule jobs
+        reschedule_job("set_ping_job_1", config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING"))
+        reschedule_job("set_ping_job_2", config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING"))
+        if not scheduler.running:
+            scheduler.start()
+            logger.info("Scheduler started and jobs scheduled.")
+        # Notify in channel
+        channel = await client.fetch_channel(CHANNEL_ID)
+        await channel.send("🟢 Bot is online!")
+        logger.info("Sent online notification to the channel.")
+    except Exception as e:
+        logger.exception("Error during on_ready sequence")
+
+# --- Django management command ---
+class Command(BaseCommand):
+    help = "Starts the Discord Ping Bot"
+    def handle(self, *args, **options):
+        logger.info("Starting Discord client...")
+        client.run(DISCORD_TOKEN)
+
