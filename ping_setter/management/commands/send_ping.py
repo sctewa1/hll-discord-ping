@@ -71,7 +71,7 @@ HLL_DISCORD_UTILS_DIR =  config.get("HLL_DISCORD_UTILS_DIR")
 DB_URL           = config.get("DB_URL")
 
 if not DISCORD_TOKEN or CHANNEL_ID is None or not API_BASE_URL or not API_BEARER_TOKEN:
-raise ValueError("Essential configuration missing in config.jsonc")
+    raise ValueError("Essential configuration missing in config.jsonc")
 
 # Prepare headers for API calls
 HEADERS = {
@@ -416,23 +416,23 @@ async def bans(interaction: discord.Interaction):
 @tree.command(name="unban", description="Unban player by ban number from the last /bans list")
 data = get_recent_bans()
 if not data:
-await interaction.response.send_message("⚠️ No bans to unban.")
+    await interaction.response.send_message("⚠️ No bans to unban.")
 logger.info(f"User `{interaction.user.name}` attempted to unban a player, but no bans were found.")
 return
 
 if 1 <= index <= len(data):
-player_id = data[index - 1]["player_id"]
+    player_id = data[index - 1]["player_id"]
 name = get_player_name(player_id)
 success = unban_player(player_id)
 
 if success:
-await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
+    await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
 logger.info(f"User `{interaction.user.name}` successfully unbanned player `{name}` (ID: `{player_id}`)")
 else:
-await interaction.response.send_message("❌ Failed to unban player.")
+    await interaction.response.send_message("❌ Failed to unban player.")
 logger.error(f"User `{interaction.user.name}` failed to unban player `{name}` (ID: `{player_id}`).")
 else:
-await interaction.response.send_message("⚠️ Invalid ban index.")
+    await interaction.response.send_message("⚠️ Invalid ban index.")
 logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
 
 
@@ -535,14 +535,14 @@ return
 filtered = [
 (p["player"], p["player_id"]) for p in stats
 if p.get("player", "").lower().startswith(name_prefix.lower())
-]
+    ]
 
 if not filtered:
-await interaction.followup.send("⚠️ No players found with that prefix.")
+    await interaction.followup.send("⚠️ No players found with that prefix.")
 return
 
 if len(filtered) > 25:
-await interaction.followup.send("⚠️ Too many matches. Please narrow your prefix.")
+    await interaction.followup.send("⚠️ Too many matches. Please narrow your prefix.")
 return
 
     class PlayerDropdown(discord.ui.Select):
