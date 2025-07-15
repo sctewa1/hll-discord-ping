@@ -81,10 +81,6 @@ HEADERS = {
 
 # Scheduler timezone
 tz_name = config.get("TIMEZONE", "Australia/Sydney")
-try:
-    tz = timezone(tz_name)
-except Exception:
-    logger.warning(f"Invalid timezone '{tz_name}', defaulting to Australia/Sydney")
     tz = timezone("Australia/Sydney")
 scheduler = AsyncIOScheduler(timezone=tz)
 
@@ -184,8 +180,6 @@ def enable_enforce(pretty_name: str):
         restart_hll_utils()
         logger.info(f"Enforced map '{map_id}' (pretty name: '{pretty_name}') and restarted HLL Discord Utils.")
         return True
-    except Exception as e:
-        logger.error(f"Failed to enforce map '{pretty_name}': {e}")
         return False
 
 
@@ -204,8 +198,6 @@ def disable_enforce():
         restart_hll_utils()
         logger.info("Disabled map enforcement and restarted HLL Discord Utils.")
         return True
-    except Exception as e:
-        logger.error(f"Failed to disable map enforcement: {e}")
         return False
 
 def get_max_ping_autokick() -> int | None:
@@ -301,19 +293,13 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
         else:
             logger.warning(f"Job ID '{job_id}' is not recognized for config update")
 
-    except Exception as e:
-        logger.error(f"Failed to reschedule {job_id}: {e}")
 
 # --- Slash commands ---
 from datetime import datetime
 import discord.ui
 
 @tree.command(name="banplayer", description="Ban a live player by name prefix")
-@app_commands.describe(name_prefix="Player name prefix")
-async def banplayer(interaction: discord.Interaction, name_prefix: str):
-    try:
 async def banplayer(interaction: discord.Interaction):
-        r = requests.get(f"{API_BASE_URL}/api/get_live_scoreboard", headers=HEADERS)
         r.raise_for_status()
         stats = r.json().get("result", {}).get("stats", [])
     except Exception as e:
@@ -357,8 +343,6 @@ async def banplayer(interaction: discord.Interaction):
                         "admin_name": "discordBot"
                     }
 
-                    try:
-                        r = requests.post(f"{API_BASE_URL}/api/add_blacklist_record", headers=HEADERS, json=payload)
                         r.raise_for_status()
 
                         await modal_interaction.response.send_message(
@@ -372,8 +356,6 @@ async def banplayer(interaction: discord.Interaction):
                         if channel:
                             await channel.send(f"👮 `{interaction.user.name}` banned `{player_name}` for reason: '{self.reason.value}'")
 
-                    except Exception as e:
-                        logger.error(f"Ban failed for player_id {player_id}: {e}")
                         await modal_interaction.response.send_message("❌ Failed to ban player.", ephemeral=True)
 
             await interaction_select.response.send_modal(ReasonModal())
@@ -396,8 +378,6 @@ async def curping(interaction: discord.Interaction):
         await interaction.response.send_message("⚠️ Could not fetch current ping.")
 
 @tree.command(name="setping", description="Set max ping autokick")
-@app_commands.describe(ping="Max ping value (ms)")
-async def setping(interaction: discord.Interaction, ping: int):
 @tree.command(name="curscheduledtime", description="Show scheduled jobs and pings")
 async def curscheduledtime(interaction: discord.Interaction):
     logger.info(f"[/curscheduledtime] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -408,8 +388,6 @@ async def curscheduledtime(interaction: discord.Interaction):
     await interaction.response.send_message(msg)
 
 @tree.command(name="setscheduledtime", description="Set scheduled job time and ping")
-@app_commands.describe(job="Job number (1 or 2)", time="Time (HHMM)", ping="Ping value")
-async def setscheduledtime(interaction: discord.Interaction, job: int, time: str, ping: int):
 @tree.command(name="bans", description="Show last 5 temp bans")
 async def bans(interaction: discord.Interaction):
     logger.info(f"[/bans] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -436,28 +414,26 @@ async def bans(interaction: discord.Interaction):
     await interaction.response.send_message("**Last 5 Temp Bans:**\n" + "\n".join(lines))
 
 @tree.command(name="unban", description="Unban player by ban number from the last /bans list")
-@app_commands.describe(index="Index of ban from /bans list (1-based)")
-async def unban(interaction: discord.Interaction, index: int):
     data = get_recent_bans()
     if not data:
-    await interaction.response.send_message("⚠️ No bans to unban.")
-    logger.info(f"User `{interaction.user.name}` attempted to unban a player, but no bans were found.")
-    return
+        await interaction.response.send_message("⚠️ No bans to unban.")
+        logger.info(f"User `{interaction.user.name}` attempted to unban a player, but no bans were found.")
+        return
 
     if 1 <= index <= len(data):
-    player_id = data[index - 1]["player_id"]
-    name = get_player_name(player_id)
-    success = unban_player(player_id)
+        player_id = data[index - 1]["player_id"]
+        name = get_player_name(player_id)
+        success = unban_player(player_id)
 
-    if success:
-    await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
-    logger.info(f"User `{interaction.user.name}` successfully unbanned player `{name}` (ID: `{player_id}`)")
+        if success:
+            await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
+            logger.info(f"User `{interaction.user.name}` successfully unbanned player `{name}` (ID: `{player_id}`)")
+        else:
+            await interaction.response.send_message("❌ Failed to unban player.")
+            logger.error(f"User `{interaction.user.name}` failed to unban player `{name}` (ID: `{player_id}`).")
     else:
-    await interaction.response.send_message("❌ Failed to unban player.")
-    logger.error(f"User `{interaction.user.name}` failed to unban player `{name}` (ID: `{player_id}`).")
-    else:
-    await interaction.response.send_message("⚠️ Invalid ban index.")
-    logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
+        await interaction.response.send_message("⚠️ Invalid ban index.")
+        logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
 
 
 @tree.command(name="online", description="Check if bot and API are running")
@@ -471,7 +447,6 @@ async def online(interaction: discord.Interaction):
 
 # Slash command: /voteEnforceMap
 @tree.command(name="voteenforcemap", description="Enforce a specific map to show up each time in future votes")
-@app_commands.describe(map_name="Pretty name of map")
 async def vote_enforce_map(interaction: discord.Interaction, map_name: str):  # Use map_name in the function signature
     if is_enforce_active():
         await interaction.response.send_message(
@@ -552,29 +527,23 @@ async def help_command(interaction: discord.Interaction):
 
 
 @tree.command(name="bantemp", description="Temporarily ban a live player by name prefix")
-@app_commands.describe(name_prefix="Player name prefix")
-async def bantemp(interaction: discord.Interaction, name_prefix: str):
-    try:
-    r = requests.get(f"{API_BASE_URL}/api/get_live_scoreboard", headers=HEADERS)
-    r.raise_for_status()
-    stats = r.json().get("result", {}).get("stats", [])
-    except Exception as e:
-    logger.error(f"Failed to fetch scoreboard: {e}")
-    await interaction.followup.send("❌ Error fetching live scoreboard.")
-    return
+        r.raise_for_status()
+        stats = r.json().get("result", {}).get("stats", [])
+        await interaction.followup.send("❌ Error fetching live scoreboard.")
+        return
 
     filtered = [
-    (p["player"], p["player_id"]) for p in stats
-    if p.get("player", "").lower().startswith(name_prefix.lower())
+        (p["player"], p["player_id"]) for p in stats
+        if p.get("player", "").lower().startswith(name_prefix.lower())
     ]
 
     if not filtered:
-    await interaction.followup.send("⚠️ No players found with that prefix.")
-    return
+        await interaction.followup.send("⚠️ No players found with that prefix.")
+        return
 
     if len(filtered) > 25:
-    await interaction.followup.send("⚠️ Too many matches. Please narrow your prefix.")
-    return
+        await interaction.followup.send("⚠️ Too many matches. Please narrow your prefix.")
+        return
 
     class PlayerDropdown(discord.ui.Select):
         def __init__(self):
@@ -618,8 +587,6 @@ async def bantemp(interaction: discord.Interaction, name_prefix: str):
                             await channel.send(f"⛔ `{interaction.user.name}` temp-banned `{player_name}` ({hours}h) for: '{self.reason.value}'")
 
                         logger.info(f"{interaction.user.name} temp-banned {player_name} ({player_id}) for {hours}h, reason: {self.reason.value}")
-                    except Exception as e:
-                        logger.error(f"Temp ban failed: {e}")
                         await modal_interaction.response.send_message("❌ Failed to temp-ban player.", ephemeral=True)
 
             await interaction_select.response.send_modal(DurationModal())
@@ -638,12 +605,8 @@ async def show_vips(interaction: discord.Interaction):
 
     vip_url = f"{API_BASE_URL}/api/get_vip_ids"
 
-    try:
-        async with aiohttp.ClientSession() as session:
             async with session.get(vip_url, headers=HEADERS) as resp:
                 data = await resp.json()
-    except Exception as e:
-        logger.error(f"Failed to fetch VIP data: {e}")
         return await interaction.followup.send("❌ Error fetching VIP data.")
 
     from datetime import timezone as dt_timezone
@@ -654,14 +617,10 @@ async def show_vips(interaction: discord.Interaction):
         vip_exp = entry.get("vip_expiration")
         if vip_exp == "3000-01-01T00:00:00+00:00":
             continue  # skip permanent VIPs
-        try:
-            expires_at = datetime.fromisoformat(vip_exp)
             if expires_at > now:
                 delta = expires_at - now
                 name = entry["name"].replace(" - CRCON Seed VIP", "")
                 vip_entries.append((name, delta))
-        except Exception:
-            continue
 
     if not vip_entries:
         await interaction.followup.send("⚠️ No temporary VIPs found.")
@@ -723,8 +682,6 @@ async def show_vips(interaction: discord.Interaction):
 @tree.command(name="playerstats", description="Show all-time stats for a player by name")
 @app_commands.describe(player_name="All or part of the player's name")
 async def playerstats(interaction: discord.Interaction, player_name: str):
-    @app_commands.describe(player_name="All or part of the player's name")
-async def playerstats(interaction: discord.Interaction, player_name: str):
     logger.info(f"[/playerstats] Requested by {interaction.user} (ID: {interaction.user.id}), search: {player_name}")
 
     # Restrict to stats channel only
@@ -736,8 +693,6 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
 
     await interaction.response.defer(ephemeral=True)
 
-    try:
-        # Search for up to 20 close matches by name (case-insensitive)
         with engine.connect() as conn:
             query = text("""
                 SELECT DISTINCT ON (pn.playersteamid_id)
@@ -803,8 +758,6 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
 
         await interaction.followup.send("Select a player:", view=PlayerSelect())
 
-    except Exception as e:
-        logger.exception("Error in /playerstats command")
         await interaction.followup.send("An error occurred while processing your request.", ephemeral=True)
 
 # --- Bot startup ---
