@@ -788,9 +788,3 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         logger.info("Starting Discord client...")
         client.run(DISCORD_TOKEN)
-
-# --- /playerstats command ---
-@tree.command(name="playerstats", description="Show all-time stats for a player")
-@app_commands.describe(player_name="Start typing a player name")
-
-
