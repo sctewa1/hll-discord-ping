@@ -787,80 +787,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         logger.info("Starting Discord client...")
-        @tree.command(name="playerstats", description="Show stats for a player by name")
-@app_commands.describe(player_name="Type part of the player name to search")
-async def playerstats(interaction: discord.Interaction, player_name: str):
-    if interaction.channel_id != config.get("CHANNEL_ID_stats"):
-        await interaction.response.send_message("This command can only be used in the stats channel.", ephemeral=True)
-        return
+        client.run(DISCORD_TOKEN)
 
-    conn = psycopg2.connect(config["DB_URL"])
-    cur = conn.cursor()
+# --- /playerstats command ---
+@tree.command(name="playerstats", description="Show all-time stats for a player")
+@app_commands.describe(player_name="Start typing a player name")
 
-    # Step 1: Find matching player names
-    cur.execute("""
-        SELECT DISTINCT ON (playersteamid_id) playersteamid_id, name
-        FROM player_names
-        WHERE name ILIKE %s
-        ORDER BY playersteamid_id, last_seen DESC
-        LIMIT 20
-    """, (f"%{player_name}%",))
-    matches = cur.fetchall()
 
-    if not matches:
-        await interaction.response.send_message(f"No players found matching '{player_name}'.", ephemeral=True)
-        cur.close()
-        conn.close()
-        return
-
-    if len(matches) == 1:
-        chosen_id, chosen_name = matches[0]
-    else:
-        # If multiple matches, show options
-        options = "
-".join([f"{idx+1}. {name}" for idx, (_, name) in enumerate(matches)])
-        await interaction.response.send_message(f"Multiple matches found:
-{options}
-Please refine your search.", ephemeral=True)
-        cur.close()
-        conn.close()
-        return
-
-    # Step 2: Query stats from player_stats using ID
-    cur.execute("SELECT kills, deaths, teamkills, time_seconds, kill_death_ratio, longest_life_secs, shortest_life_secs FROM player_stats WHERE playersteamid_id = %s ORDER BY time_seconds DESC LIMIT 1", (chosen_id,))
-    stats = cur.fetchone()
-    cur.close()
-    conn.close()
-
-    if not stats:
-        await interaction.response.send_message(f"No stats found for {chosen_name}.", ephemeral=True)
-        return
-
-    kills, deaths, teamkills, time_sec, kd_ratio, longest, shortest = stats
-    hours = time_sec // 3600
-    mins = (time_sec % 3600) // 60
-
-    response = (
-        f"**Stats for {chosen_name}**
-"
-        f"- Time Played: {hours}h {mins}m
-"
-        f"- Kills: {kills}
-"
-        f"- Deaths: {deaths}
-"
-        f"- Teamkills: {teamkills}
-"
-        f"- K/D Ratio: {kd_ratio:.2f}
-"
-        f"- Longest Life: {longest}s
-"
-        f"- Shortest Life: {shortest}s"
-    )
-
-    await interaction.response.send_message(response)
-
-    # Log requester and lookup
-    logging.info(f"/playerstats used by {interaction.user.display_name}#{interaction.user.id} to look up {chosen_name}")
-
-client.run(DISCORD_TOKEN)
