@@ -17,6 +17,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
 from .logging_config import setup_logging
+from sqlalchemy import text, create_engine
 
 # Absolute path to config.jsonc inside the container.
 CONFIG_PATH = "/opt/ping_setter_hll/config.jsonc"
@@ -44,6 +45,7 @@ def load_config():
     return {
         "DISCORD_TOKEN": "",
         "CHANNEL_ID": None,
+	"CHANNEL_ID_STATS" = None,
         "API_BASE_URL": "",
         "API_BEARER_TOKEN": "",
         "TIMEZONE": "Australia/Sydney",
@@ -61,10 +63,12 @@ config = load_config()
 # Required settings
 DISCORD_TOKEN    = config.get("DISCORD_TOKEN")
 CHANNEL_ID       = config.get("CHANNEL_ID")
+CHANNEL_ID_STATS = config.get("CHANNEL_ID_stats")
 API_BASE_URL     = config.get("API_BASE_URL")
 API_BEARER_TOKEN = config.get("API_BEARER_TOKEN")
 HLL_DISCORD_UTILS_CONFIG = config.get("HLL_DISCORD_UTILS_CONFIG")
 HLL_DISCORD_UTILS_DIR =  config.get("HLL_DISCORD_UTILS_DIR")
+DB_URL           = config.get("DB_URL")
 
 if not DISCORD_TOKEN or CHANNEL_ID is None or not API_BASE_URL or not API_BEARER_TOKEN:
     raise ValueError("Essential configuration missing in config.jsonc")
@@ -83,6 +87,9 @@ except Exception:
     logger.warning(f"Invalid timezone '{tz_name}', defaulting to Australia/Sydney")
     tz = timezone("Australia/Sydney")
 scheduler = AsyncIOScheduler(timezone=tz)
+
+# SQLAlchemy DB engine
+engine = create_engine(DB_URL)
 
 # Discord bot setup (only slash commands)
 intents = discord.Intents.default()
@@ -763,72 +770,75 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
 
     await interaction.response.defer(ephemeral=True)
 
-        with engine.connect() as conn:
-            query = text("""
-                SELECT DISTINCT ON (pn.playersteamid_id)
-                    pn.name, pn.playersteamid_id
-                FROM player_names pn
-                WHERE pn.name ILIKE :search
-                ORDER BY pn.playersteamid_id, pn.last_seen DESC
-                LIMIT 20
-            """)
-            results = conn.execute(query, {"search": f"%{player_name}%"}).fetchall()
+    # Search for players
+    with engine.connect() as conn:
+        query = text("""
+            SELECT DISTINCT ON (pn.playersteamid_id)
+                pn.name, pn.playersteamid_id
+            FROM player_names pn
+            WHERE pn.name ILIKE :search
+            ORDER BY pn.playersteamid_id, pn.last_seen DESC
+            LIMIT 20
+        """)
+        results = conn.execute(query, {"search": f"%{player_name}%"}).fetchall()
 
-        if not results:
-            await interaction.followup.send("No matching players found.")
-            return
+    if not results:
+        await interaction.followup.send("No matching players found.", ephemeral=True)
+        return
 
-        options = [
-            discord.SelectOption(label=row.name[:100], value=str(row.playersteamid_id))
-            for row in results
-        ]
+    options = [
+        discord.SelectOption(label=row.name[:100], value=str(row.playersteamid_id))
+        for row in results
+    ]
 
-        class PlayerSelect(discord.ui.View):
-            def __init__(self):
-                super().__init__(timeout=30)
-                self.select = discord.ui.Select(
-                    placeholder="Select a player",
-                    options=options,
-                    min_values=1,
-                    max_values=1,
-                )
-                self.select.callback = self.select_callback
-                self.add_item(self.select)
+    class PlayerSelect(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=30)
+            self.select = discord.ui.Select(
+                placeholder="Select a player",
+                options=options,
+                min_values=1,
+                max_values=1,
+            )
+            self.select.callback = self.select_callback
+            self.add_item(self.select)
 
-            async def select_callback(self, select_interaction: discord.Interaction):
-                steam_id = int(self.select.values[0])
-                with engine.connect() as conn:
-                    stats_query = text("""
-                        SELECT kills, deaths, kill_streak, death_streak, kdr, matches_played, win_count, loss_count
-                        FROM player_stats
-                        WHERE playersteamid_id = :steam_id
-                    """)
-                    stats = conn.execute(stats_query, {"steam_id": steam_id}).fetchone()
+        async def select_callback(self, select_interaction: discord.Interaction):
+            steam_id = int(self.select.values[0])
 
-                if not stats:
-                    await select_interaction.response.send_message("No stats found for this player.", ephemeral=True)
-                    return
+            with engine.connect() as conn:
+                stats_query = text("""
+                    SELECT kills, deaths, kill_streak, death_streak, kdr, matches_played, win_count, loss_count
+                    FROM player_stats
+                    WHERE playersteamid_id = :steam_id
+                """)
+                stats = conn.execute(stats_query, {"steam_id": steam_id}).fetchone()
 
-                await select_interaction.response.send_message(
-                    f"**Stats for `{steam_id}`:**\n"
-                    f"Kills: {stats.kills}\n"
-                    f"Deaths: {stats.deaths}\n"
-                    f"KDR: {stats.kdr:.2f if stats.kdr is not None else 0}\n"
-                    f"Kill Streak: {stats.kill_streak}\n"
-                    f"Death Streak: {stats.death_streak}\n"
-                    f"Matches Played: {stats.matches_played}\n"
-                    f"Wins: {stats.win_count}\n"
-                    f"Losses: {stats.loss_count}",
-                    ephemeral=True
-                )
-                logger.info(
-                    f"/playerstats used by {interaction.user.display_name} ({interaction.user.id}) "
-                    f"for Steam ID {steam_id}"
-                )
+            if not stats:
+                await select_interaction.response.send_message("No stats found for this player.", ephemeral=True)
+                return
 
-        await interaction.followup.send("Select a player:", view=PlayerSelect())
+            kdr_display = f"{stats.kdr:.2f}" if stats.kdr is not None else "0.00"
 
-        await interaction.followup.send("An error occurred while processing your request.", ephemeral=True)
+            await select_interaction.response.send_message(
+                f"**Stats for `{steam_id}`:**\n"
+                f"Kills: {stats.kills}\n"
+                f"Deaths: {stats.deaths}\n"
+                f"KDR: {kdr_display}\n"
+                f"Kill Streak: {stats.kill_streak}\n"
+                f"Death Streak: {stats.death_streak}\n"
+                f"Matches Played: {stats.matches_played}\n"
+                f"Wins: {stats.win_count}\n"
+                f"Losses: {stats.loss_count}",
+                ephemeral=True
+            )
+
+            logger.info(
+                f"/playerstats used by {interaction.user.display_name} ({interaction.user.id}) "
+                f"for Steam ID {steam_id}"
+            )
+
+    await interaction.followup.send("Select a player:", view=PlayerSelect())
 
 
 # --- Bot startup ---
