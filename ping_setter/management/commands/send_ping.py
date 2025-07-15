@@ -307,11 +307,6 @@ from datetime import datetime
 import discord.ui
 
 @tree.command(name="banplayer", description="Ban a live player by name prefix")
-@app_commands.describe(name_prefix="Start of the player name")
-async def banplayer(interaction: discord.Interaction, name_prefix: str):
-    logger.info(f"[/banplayer] Requested by {interaction.user} (ID: {interaction.user.id}) - prefix: {name_prefix}")
-    await interaction.response.defer(ephemeral=True)
-
     try:
         r = requests.get(f"{API_BASE_URL}/api/get_live_scoreboard", headers=HEADERS)
         r.raise_for_status()
@@ -396,16 +391,6 @@ async def curping(interaction: discord.Interaction):
         await interaction.response.send_message("⚠️ Could not fetch current ping.")
 
 @tree.command(name="setping", description="Set max ping autokick")
-@app_commands.describe(ping="Ping in ms")
-async def setping(interaction: discord.Interaction, ping: int):
-    logger.info(f"[/setping] Requested by {interaction.user} (ID: {interaction.user.id}) with ping {ping}")
-    if ping <= 0 or ping > 10000:
-        return await interaction.response.send_message("⚠️ Ping must be between 1 and 10000 ms.")
-    if set_max_ping_autokick(ping):
-        await interaction.response.send_message(f"✅ Set max ping autokick to `{ping}` ms.")
-    else:
-        await interaction.response.send_message("❌ Failed to set ping.")
-
 @tree.command(name="curscheduledtime", description="Show scheduled jobs and pings")
 async def curscheduledtime(interaction: discord.Interaction):
     logger.info(f"[/curscheduledtime] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -416,23 +401,6 @@ async def curscheduledtime(interaction: discord.Interaction):
     await interaction.response.send_message(msg)
 
 @tree.command(name="setscheduledtime", description="Set scheduled job time and ping")
-@app_commands.describe(job="Job number (1 or 2)", time="Time HHMM", ping="Ping in ms")
-async def setscheduledtime(interaction: discord.Interaction, job: int, time: str, ping: int):
-    logger.info(f"[/setscheduledtime] Requested by {interaction.user} (ID: {interaction.user.id}) - Job {job}, Time {time}, Ping {ping}")
-    if not time.isdigit() or len(time) != 4:
-        return await interaction.response.send_message("⚠️ Invalid time format. Use HHMM.")
-    hour, minute = int(time[:2]), int(time[2:])
-    if not (0 <= hour < 24 and 0 <= minute < 60):
-        return await interaction.response.send_message("⚠️ Invalid time value.")
-    if job == 1:
-        reschedule_job("set_ping_job_1", time, ping)
-        await interaction.response.send_message(f"✅ Job 1 rescheduled to `{hour:02d}:{minute:02d}` @ {ping}ms.")
-    elif job == 2:
-        reschedule_job("set_ping_job_2", time, ping)
-        await interaction.response.send_message(f"✅ Job 2 rescheduled to `{hour:02d}:{minute:02d}` @ {ping}ms.")
-    else:
-        await interaction.response.send_message("⚠️ Invalid job number (1 or 2).")
-
 @tree.command(name="bans", description="Show last 5 temp bans")
 async def bans(interaction: discord.Interaction):
     logger.info(f"[/bans] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -459,10 +427,6 @@ async def bans(interaction: discord.Interaction):
     await interaction.response.send_message("**Last 5 Temp Bans:**\n" + "\n".join(lines))
 
 @tree.command(name="unban", description="Unban player by ban number from the last /bans list")
-@app_commands.describe(index="Ban number from the /bans list (1-5)")
-async def unban(interaction: discord.Interaction, index: int):
-    logger.info(f"[/unban] Requested by {interaction.user} (ID: {interaction.user.id}), index: {index}")
- 
     data = get_recent_bans()
     if not data:
         await interaction.response.send_message("⚠️ No bans to unban.")
@@ -496,8 +460,6 @@ async def online(interaction: discord.Interaction):
 
 # Slash command: /voteEnforceMap
 @tree.command(name="voteenforcemap", description="Enforce a specific map to show up each time in future votes")
-@app_commands.describe(map_name="Name of the map to enforce")
-@app_commands.autocomplete(map_name=map_name_autocomplete)  # Use map_name here instead of map
 async def vote_enforce_map(interaction: discord.Interaction, map_name: str):  # Use map_name in the function signature
     if is_enforce_active():
         await interaction.response.send_message(
@@ -578,11 +540,6 @@ async def help_command(interaction: discord.Interaction):
 
 
 @tree.command(name="bantemp", description="Temporarily ban a live player by name prefix")
-@app_commands.describe(name_prefix="Start of the player name")
-async def bantemp(interaction: discord.Interaction, name_prefix: str):
-    logger.info(f"[/bantemp] Requested by {interaction.user} (ID: {interaction.user.id}) - prefix: {name_prefix}")
-    await interaction.response.defer(ephemeral=True)
-
     try:
         r = requests.get(f"{API_BASE_URL}/api/get_live_scoreboard", headers=HEADERS)
         r.raise_for_status()
@@ -788,14 +745,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         logger.info("Starting Discord client...")
         client.run(DISCORD_TOKEN)
-
-@bot.tree.command(name="playerstats", description="Show a player's all-time stats")
-@app_commands.describe(player_name="Type part of the player name to search")
-async def playerstats(interaction: discord.Interaction, player_name: str):
-    import logging
-    from sqlalchemy import text
-    from datetime import datetime
-    import pytz
 
     if interaction.channel.id != config.get("CHANNEL_ID_stats"):
         await interaction.response.send_message(
