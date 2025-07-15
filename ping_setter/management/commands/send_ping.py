@@ -45,7 +45,7 @@ def load_config():
     return {
         "DISCORD_TOKEN": "",
         "CHANNEL_ID": None,
-	"CHANNEL_ID_STATS" = None,
+	"CHANNEL_ID_STATS": None,
         "API_BASE_URL": "",
         "API_BEARER_TOKEN": "",
         "TIMEZONE": "Australia/Sydney",
