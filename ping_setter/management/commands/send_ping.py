@@ -308,6 +308,7 @@ import discord.ui
 
 @tree.command(name="banplayer", description="Ban a live player by name prefix")
     try:
+async def banplayer(interaction: discord.Interaction):
         r = requests.get(f"{API_BASE_URL}/api/get_live_scoreboard", headers=HEADERS)
         r.raise_for_status()
         stats = r.json().get("result", {}).get("stats", [])
