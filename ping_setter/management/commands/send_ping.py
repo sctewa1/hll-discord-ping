@@ -303,6 +303,120 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
         logger.error(f"Failed to reschedule {job_id}: {e}")
 
 # --- Slash commands ---
+# Restrict /playerstats to the designated stats channel
+def is_stats_channel():
+    def predicate(interaction: discord.Interaction) -> bool:
+        return interaction.channel.id == config.get("CHANNEL_ID_stats")
+    return app_commands.check(predicate)
+
+from discord.ui import View, Select
+from sqlalchemy.sql import text
+from datetime import datetime
+from rcon.models import enter_session
+from rcon.player_history import get_player_profile
+
+class PlayerDropdown(Select):
+    def __init__(self, players: list[tuple[str, str]]):
+        options = [discord.SelectOption(label=name, value=steam_id) for name, steam_id in players]
+        super().__init__(placeholder="Select a player", options=options, min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(thinking=True)
+        steam_id = self.values[0]
+
+        try:
+            profile = get_player_profile(player_id=steam_id, nb_sessions=0)
+        except Exception:
+            await interaction.followup.send("❌ Failed to get profile data.", ephemeral=True)
+            return
+
+        with enter_session() as sess:
+            row = sess.execute(text("SELECT id, name FROM steam_id_64 WHERE steam_id_64 = :sid"), {"sid": steam_id}).first()
+            if not row:
+                await interaction.followup.send("Player not found in DB.", ephemeral=True)
+                return
+            db_id, player_name = row
+
+            total = sess.execute(text("""
+                SELECT COUNT(*) AS games,
+                       SUM(kills) AS kills,
+                       SUM(deaths) AS deaths
+                FROM player_stats
+                WHERE playersteamid_id = :id
+            """), {"id": db_id}).first()
+
+            monthly = sess.execute(text("""
+                SELECT DATE_TRUNC('month', start) AS month,
+                       SUM(kills) AS kills,
+                       SUM(deaths) AS deaths,
+                       COUNT(*) AS games
+                FROM player_stats
+                WHERE playersteamid_id = :id
+                  AND start >= DATE_TRUNC('month', NOW()) - INTERVAL '5 months'
+                GROUP BY month
+                ORDER BY month DESC
+            """), {"id": db_id}).fetchall()
+
+            earlier = sess.execute(text("""
+                SELECT SUM(kills), SUM(deaths), COUNT(*)
+                FROM player_stats
+                WHERE playersteamid_id = :id
+                  AND start < DATE_TRUNC('month', NOW()) - INTERVAL '5 months'
+            """), {"id": db_id}).first()
+
+        embed = discord.Embed(title=f"📊 Stats for {player_name}", color=discord.Color.dark_green())
+
+        totals_block = (
+            f"Games Played:   {total.games}\n"
+            f"Total Kills:    {total.kills or 0}\n"
+            f"Total Deaths:   {total.deaths or 0}\n"
+            f"K/D Ratio:      {round((total.kills or 0) / max(1, (total.deaths or 1)), 2)}\n"
+            f"Playtime:       {round(profile['total_playtime_seconds'] / 3600, 1)} hours"
+        )
+        embed.add_field(name="🎖️ All-Time Totals:", value=totals_block, inline=False)
+
+        breakdown = "📅 Monthly Breakdown (K = Kills, D = Deaths, G = Games, R = K/D Ratio):\n"
+        for row in monthly[::-1]:
+            month_str = datetime.strftime(row[0], "%b %y")
+            k, d, g = row[1] or 0, row[2] or 0, row[3]
+            r = round(k / max(1, d), 2)
+            color_block = "🟩" if r >= 1.2 else "🟨" if r >= 1.0 else "🟥"
+            breakdown += f"{color_block} {month_str} — {k:>3} / {d:>3} / {g:>2} / {r:.2f}\n"
+
+        if earlier and earlier[0]:
+            ek, ed, eg = earlier[0] or 0, earlier[1] or 0, earlier[2] or 0
+            er = round(ek / max(1, ed), 2)
+            breakdown += f"\n🗂️ Earlier — {ek:,} / {ed:,} / {eg:,} / {er:.2f}"
+
+        embed.add_field(name="Recent Performance", value=breakdown, inline=False)
+        embed.set_footer(text="ANZR HLL All-Time Stats")
+
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+class PlayerDropdownView(View):
+    def __init__(self, players):
+        super().__init__(timeout=30)
+        self.add_item(PlayerDropdown(players))
+
+@tree.command(name="playerstats", description="Show all-time stats for a player")
+@is_stats_channel()
+@app_commands.describe(playername="Start typing a player's name")
+async def playerstats(interaction: discord.Interaction, playername: str):
+    with enter_session() as sess:
+        results = sess.execute(text("""
+            SELECT name, steam_id_64 FROM steam_id_64
+            WHERE name ILIKE :query
+            ORDER BY name
+            LIMIT 20
+        """), {"query": f"%{playername}%"}).fetchall()
+
+    if not results:
+        await interaction.response.send_message("No matching players found.", ephemeral=True)
+        return
+
+    view = PlayerDropdownView([(r[0], r[1]) for r in results])
+    await interaction.response.send_message("Select a player to view stats:", view=view, ephemeral=True)
+
 from datetime import datetime
 import discord.ui
 
