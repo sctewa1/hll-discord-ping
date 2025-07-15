@@ -303,7 +303,7 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
         logger.error(f"Failed to reschedule {job_id}: {e}")
 
 # --- Slash commands ---
-# Restrict /playerstats to the designated stats channel
+# Restrict /playerstats to a specific stats channel
 def is_stats_channel():
     def predicate(interaction: discord.Interaction) -> bool:
         return interaction.channel.id == config.get("CHANNEL_ID_stats")
@@ -312,8 +312,7 @@ def is_stats_channel():
 from discord.ui import View, Select
 from sqlalchemy.sql import text
 from datetime import datetime
-from rcon.models import enter_session
-from rcon.player_history import get_player_profile
+from rcon.models import session_scope  # Use existing scoped session logic
 
 class PlayerDropdown(Select):
     def __init__(self, players: list[tuple[str, str]]):
@@ -324,13 +323,7 @@ class PlayerDropdown(Select):
         await interaction.response.defer(thinking=True)
         steam_id = self.values[0]
 
-        try:
-            profile = get_player_profile(player_id=steam_id, nb_sessions=0)
-        except Exception:
-            await interaction.followup.send("❌ Failed to get profile data.", ephemeral=True)
-            return
-
-        with enter_session() as sess:
+        with session_scope() as sess:
             row = sess.execute(text("SELECT id, name FROM steam_id_64 WHERE steam_id_64 = :sid"), {"sid": steam_id}).first()
             if not row:
                 await interaction.followup.send("Player not found in DB.", ephemeral=True)
@@ -370,8 +363,7 @@ class PlayerDropdown(Select):
             f"Games Played:   {total.games}\n"
             f"Total Kills:    {total.kills or 0}\n"
             f"Total Deaths:   {total.deaths or 0}\n"
-            f"K/D Ratio:      {round((total.kills or 0) / max(1, (total.deaths or 1)), 2)}\n"
-            f"Playtime:       {round(profile['total_playtime_seconds'] / 3600, 1)} hours"
+            f"K/D Ratio:      {round((total.kills or 0) / max(1, (total.deaths or 1)), 2)}"
         )
         embed.add_field(name="🎖️ All-Time Totals:", value=totals_block, inline=False)
 
@@ -402,9 +394,9 @@ class PlayerDropdownView(View):
 @is_stats_channel()
 @app_commands.describe(playername="Start typing a player's name")
 async def playerstats(interaction: discord.Interaction, playername: str):
-    with enter_session() as sess:
+    with session_scope() as sess:
         results = sess.execute(text("""
-            SELECT name, steam_id_64 FROM steam_id_64
+            SELECT DISTINCT name, steam_id_64 FROM steam_id_64
             WHERE name ILIKE :query
             ORDER BY name
             LIMIT 20
