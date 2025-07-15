@@ -160,6 +160,7 @@ def is_enforce_active():
 # Function to enable map enforcement
 def enable_enforce(pretty_name: str):
     try:
+        pass
     except Exception as e:
         pass
         # Reverse lookup: pretty name -> map ID
@@ -188,6 +189,7 @@ def enable_enforce(pretty_name: str):
 # Function to disable map enforcement
 def disable_enforce():
     try:
+        pass
     except Exception as e:
         pass
         with open(HLL_DISCORD_UTILS_CONFIG, "r") as f:
@@ -274,6 +276,7 @@ async def scheduled_ping_job(job_id: str, time_str: str, ping: int):
 # --- Reschedule helper ---
 def reschedule_job(job_id: str, time_str: str, ping: int):
     try:
+        pass
     except Exception as e:
         pass
         hour, minute = int(time_str[:2]), int(time_str[2:])
@@ -568,6 +571,7 @@ return
 
                 async def on_submit(self, modal_interaction: discord.Interaction):
                     try:
+                        pass
                     except Exception as e:
                         pass
                         hours = int(str(self.duration.value).strip())
