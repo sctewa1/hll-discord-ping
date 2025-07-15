@@ -303,112 +303,6 @@ def reschedule_job(job_id: str, time_str: str, ping: int):
         logger.error(f"Failed to reschedule {job_id}: {e}")
 
 # --- Slash commands ---
-# Restrict /playerstats to a specific stats channel
-def is_stats_channel():
-    def predicate(interaction: discord.Interaction) -> bool:
-        return interaction.channel.id == config.get("CHANNEL_ID_stats")
-    return app_commands.check(predicate)
-
-from discord.ui import View, Select
-from sqlalchemy.sql import text
-from datetime import datetime
-from rcon.models import session_scope  # Use existing scoped session logic
-
-class PlayerDropdown(Select):
-    def __init__(self, players: list[tuple[str, str]]):
-        options = [discord.SelectOption(label=name, value=steam_id) for name, steam_id in players]
-        super().__init__(placeholder="Select a player", options=options, min_values=1, max_values=1)
-
-    async def callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(thinking=True)
-        steam_id = self.values[0]
-
-        with session_scope() as sess:
-            row = sess.execute(text("SELECT id, name FROM steam_id_64 WHERE steam_id_64 = :sid"), {"sid": steam_id}).first()
-            if not row:
-                await interaction.followup.send("Player not found in DB.", ephemeral=True)
-                return
-            db_id, player_name = row
-
-            total = sess.execute(text("""
-                SELECT COUNT(*) AS games,
-                       SUM(kills) AS kills,
-                       SUM(deaths) AS deaths
-                FROM player_stats
-                WHERE playersteamid_id = :id
-            """), {"id": db_id}).first()
-
-            monthly = sess.execute(text("""
-                SELECT DATE_TRUNC('month', start) AS month,
-                       SUM(kills) AS kills,
-                       SUM(deaths) AS deaths,
-                       COUNT(*) AS games
-                FROM player_stats
-                WHERE playersteamid_id = :id
-                  AND start >= DATE_TRUNC('month', NOW()) - INTERVAL '5 months'
-                GROUP BY month
-                ORDER BY month DESC
-            """), {"id": db_id}).fetchall()
-
-            earlier = sess.execute(text("""
-                SELECT SUM(kills), SUM(deaths), COUNT(*)
-                FROM player_stats
-                WHERE playersteamid_id = :id
-                  AND start < DATE_TRUNC('month', NOW()) - INTERVAL '5 months'
-            """), {"id": db_id}).first()
-
-        embed = discord.Embed(title=f"📊 Stats for {player_name}", color=discord.Color.dark_green())
-
-        totals_block = (
-            f"Games Played:   {total.games}\n"
-            f"Total Kills:    {total.kills or 0}\n"
-            f"Total Deaths:   {total.deaths or 0}\n"
-            f"K/D Ratio:      {round((total.kills or 0) / max(1, (total.deaths or 1)), 2)}"
-        )
-        embed.add_field(name="🎖️ All-Time Totals:", value=totals_block, inline=False)
-
-        breakdown = "📅 Monthly Breakdown (K = Kills, D = Deaths, G = Games, R = K/D Ratio):\n"
-        for row in monthly[::-1]:
-            month_str = datetime.strftime(row[0], "%b %y")
-            k, d, g = row[1] or 0, row[2] or 0, row[3]
-            r = round(k / max(1, d), 2)
-            color_block = "🟩" if r >= 1.2 else "🟨" if r >= 1.0 else "🟥"
-            breakdown += f"{color_block} {month_str} — {k:>3} / {d:>3} / {g:>2} / {r:.2f}\n"
-
-        if earlier and earlier[0]:
-            ek, ed, eg = earlier[0] or 0, earlier[1] or 0, earlier[2] or 0
-            er = round(ek / max(1, ed), 2)
-            breakdown += f"\n🗂️ Earlier — {ek:,} / {ed:,} / {eg:,} / {er:.2f}"
-
-        embed.add_field(name="Recent Performance", value=breakdown, inline=False)
-        embed.set_footer(text="ANZR HLL All-Time Stats")
-
-        await interaction.followup.send(embed=embed, ephemeral=True)
-
-class PlayerDropdownView(View):
-    def __init__(self, players):
-        super().__init__(timeout=30)
-        self.add_item(PlayerDropdown(players))
-
-@tree.command(name="playerstats", description="Show all-time stats for a player")
-@is_stats_channel()
-@app_commands.describe(playername="Start typing a player's name")
-async def playerstats(interaction: discord.Interaction, playername: str):
-    with session_scope() as sess:
-        results = sess.execute(text("""
-            SELECT DISTINCT name, steam_id_64 FROM steam_id_64
-            WHERE name ILIKE :query
-            ORDER BY name
-            LIMIT 20
-        """), {"query": f"%{playername}%"}).fetchall()
-
-    if not results:
-        await interaction.response.send_message("No matching players found.", ephemeral=True)
-        return
-
-    view = PlayerDropdownView([(r[0], r[1]) for r in results])
-    await interaction.response.send_message("Select a player to view stats:", view=view, ephemeral=True)
-
 from datetime import datetime
 import discord.ui
 
@@ -894,3 +788,66 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         logger.info("Starting Discord client...")
         client.run(DISCORD_TOKEN)
+
+# -------------------- PLAYERSTATS COMMAND --------------------
+@tree.command(name="playerstats", description="Show all-time stats for a player")
+@app_commands.describe(player_name="Start typing a player name")
+async def playerstats(interaction: discord.Interaction, player_name: str):
+    logger.info(f"[playerstats] Requested by {interaction.user} (ID: {interaction.user.id}) — Search: '{player_name}'")
+
+    # Restrict to allowed channel
+    allowed_channel_id = config.get("CHANNEL_ID_stats")
+    if interaction.channel_id != allowed_channel_id:
+        await interaction.response.send_message("This command can only be used in the designated stats channel.", ephemeral=True)
+        return
+
+    # Connect to the DB and search for player
+    from sqlalchemy import create_engine, text
+
+    engine = create_engine(config.get("DB_URL"))
+    with engine.connect() as connection:
+        query = text("""
+            SELECT DISTINCT playername
+            FROM player_stats_cache
+            WHERE playername ILIKE :search_term
+            ORDER BY playername
+            LIMIT 20
+        """)
+        results = connection.execute(query, {"search_term": f"%{player_name}%"}).fetchall()
+
+    if not results:
+        await interaction.response.send_message("No matching players found.", ephemeral=True)
+        return
+
+    # Show choices to user
+    options = [discord.SelectOption(label=row[0], value=row[0]) for row in results]
+
+    class PlayerSelect(discord.ui.View):
+        @discord.ui.select(placeholder="Select a player", options=options)
+        async def select_callback(self, interaction2: discord.Interaction, select: discord.ui.Select):
+            selected_player = select.values[0]
+            await interaction2.response.defer(thinking=True)
+
+            with engine.connect() as connection:
+                stat_query = text("""
+                    SELECT games_played, kills, deaths, kill_streak, death_streak, longest_life_secs, shortest_life_secs, kd_ratio
+                    FROM player_stats_cache
+                    WHERE playername = :name
+                    ORDER BY updated DESC
+                    LIMIT 1
+                """)
+                stat_result = connection.execute(stat_query, {"name": selected_player}).fetchone()
+
+            if not stat_result:
+                await interaction2.followup.send("No stats found.", ephemeral=True)
+                return
+
+            stat_keys = ["Games Played", "Total Kills", "Total Deaths", "Kill Streak", "Death Streak",
+                         "Longest Life (s)", "Shortest Life (s)", "K/D Ratio"]
+            stat_lines = [f"**{key}:** {value}" for key, value in zip(stat_keys, stat_result)]
+            formatted_stats = "\n".join(stat_lines)
+
+            await interaction2.followup.send(f"📊 **Stats for `{selected_player}`**:\n{formatted_stats}")
+
+    await interaction.response.send_message("Select the player to view stats:", view=PlayerSelect(), ephemeral=True)
+# -------------------- END PLAYERSTATS --------------------
