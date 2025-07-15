@@ -5,6 +5,7 @@ import logging
 import subprocess
 import requests
 import aiohttp
+import calendar
 from pathlib import Path
 from discord import Embed
 
@@ -756,6 +757,10 @@ async def show_vips(interaction: discord.Interaction):
         await interaction.followup.send(embed=pages[0], view=view)
         view.message = await interaction.original_response()
 
+
+import calendar
+from discord import Embed
+
 @tree.command(name="playerstats", description="Show all-time stats for a player by name")
 @app_commands.describe(player_name="All or part of the player's name")
 async def playerstats(interaction: discord.Interaction, player_name: str):
@@ -768,7 +773,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
         )
         return
 
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.defer()  # not ephemeral
 
     # Search for players
     with engine.connect() as conn:
@@ -783,7 +788,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
         results = conn.execute(query, {"search": f"%{player_name}%"}).fetchall()
 
     if not results:
-        await interaction.followup.send("No matching players found.", ephemeral=True)
+        await interaction.followup.send("No matching players found.")
         return
 
     options = [
@@ -807,39 +812,110 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
             steam_id = int(self.select.values[0])
 
             with engine.connect() as conn:
-                stats_query = text("""
-                    SELECT kills, deaths, kill_streak, death_streak, kdr, matches_played, win_count, loss_count
+                # All-time stats
+                all_time_query = text("""
+                    SELECT
+                        COUNT(*) AS matches_played,
+                        SUM(kills) AS total_kills,
+                        SUM(deaths) AS total_deaths,
+                        MAX(kills_streak) AS best_kill_streak,
+                        AVG(kill_death_ratio) AS avg_kdr,
+                        SUM(time_seconds) AS total_time_seconds
                     FROM player_stats
                     WHERE playersteamid_id = :steam_id
                 """)
-                stats = conn.execute(stats_query, {"steam_id": steam_id}).fetchone()
+                all_time = conn.execute(all_time_query, {"steam_id": steam_id}).fetchone()
 
-            if not stats:
-                await select_interaction.response.send_message("No stats found for this player.", ephemeral=True)
-                return
+                # Last 6 months
+                monthly_query = text("""
+                    SELECT
+                        TO_CHAR(m.start, 'YYYY-MM') AS month,
+                        COUNT(*) AS matches,
+                        SUM(kills) AS kills,
+                        SUM(deaths) AS deaths,
+                        MAX(kills_streak) AS best_kill_streak,
+                        AVG(kill_death_ratio) AS avg_kdr,
+                        SUM(time_seconds) AS time_seconds
+                    FROM player_stats ps
+                    JOIN map_history m ON ps.map_id = m.id
+                    WHERE ps.playersteamid_id = :steam_id
+                    GROUP BY month
+                    ORDER BY month DESC
+                    LIMIT 6
+                """)
+                recent_rows = conn.execute(monthly_query, {"steam_id": steam_id}).fetchall()
 
-            kdr_display = f"{stats.kdr:.2f}" if stats.kdr is not None else "0.00"
+            total_kills = all_time.total_kills or 0
+            total_deaths = all_time.total_deaths or 0
+            matches_played = all_time.matches_played or 0
+            total_seconds = all_time.total_time_seconds or 0
+            all_time_kdr = total_kills / total_deaths if total_deaths else 0
+            best_kill_streak = all_time.best_kill_streak or 0
+            total_hours = total_seconds // 3600
+            total_minutes = (total_seconds % 3600) // 60
 
-            await select_interaction.response.send_message(
-                f"**Stats for `{steam_id}`:**\n"
-                f"Kills: {stats.kills}\n"
-                f"Deaths: {stats.deaths}\n"
-                f"KDR: {kdr_display}\n"
-                f"Kill Streak: {stats.kill_streak}\n"
-                f"Death Streak: {stats.death_streak}\n"
-                f"Matches Played: {stats.matches_played}\n"
-                f"Wins: {stats.win_count}\n"
-                f"Losses: {stats.loss_count}",
-                ephemeral=True
+            def format_month_row(row):
+                kdr = f"{row.avg_kdr:.2f}" if row.avg_kdr else "0.00"
+                hours = int((row.time_seconds or 0) / 3600)
+                short_month = calendar.month_abbr[int(row.month[-2:])]
+                return f"📆 {short_month} — {row.kills} / {row.deaths} / {row.matches} / {kdr} 🎯 {row.best_kill_streak} 🕒 {hours}h"
+
+            recent_kills = sum(r.kills for r in recent_rows)
+            recent_deaths = sum(r.deaths for r in recent_rows)
+            recent_matches = sum(r.matches for r in recent_rows)
+            recent_seconds = sum(r.time_seconds for r in recent_rows)
+
+            monthly_lines = [format_month_row(r) for r in recent_rows]
+
+            earlier_kills = total_kills - recent_kills
+            earlier_deaths = total_deaths - recent_deaths
+            earlier_games = matches_played - recent_matches
+            earlier_kdr = earlier_kills / earlier_deaths if earlier_deaths else 0
+            earlier_hours = (total_seconds - recent_seconds) // 3600
+
+            player_display_name = results[0].name
+            requester = select_interaction.user.display_name
+
+            embed = Embed(
+                title=f"📊 {requester} requested stats for `{player_display_name}`",
+                color=discord.Color.blurple()
             )
 
+            embed.add_field(
+                name="🏅 All-Time Totals",
+                value=(
+                    f"• Games: **{matches_played}**\n"
+                    f"• Kills / Deaths: **{total_kills} / {total_deaths}**\n"
+                    f"• K/D Ratio: **{all_time_kdr:.2f}**\n"
+                    f"• Best Kill Streak: **{best_kill_streak}**\n"
+                    f"• Time Played: **{total_hours}h {total_minutes}m**"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="🗓️ Last 6 Months (K/D/G/R 🎯 🕒)",
+                value="\n".join(monthly_lines),
+                inline=False
+            )
+
+            embed.add_field(
+                name="📦 Earlier",
+                value=(
+                    f"{earlier_kills} / {earlier_deaths} / {earlier_games} / "
+                    f"{earlier_kdr:.2f} 🎯 {best_kill_streak} 🕒 {earlier_hours}h"
+                ),
+                inline=False
+            )
+
+            await select_interaction.response.send_message(embed=embed)
+
             logger.info(
-                f"/playerstats used by {interaction.user.display_name} ({interaction.user.id}) "
+                f"/playerstats used by {requester} ({select_interaction.user.id}) "
                 f"for Steam ID {steam_id}"
             )
 
     await interaction.followup.send("Select a player:", view=PlayerSelect())
-
 
 # --- Bot startup ---
 
