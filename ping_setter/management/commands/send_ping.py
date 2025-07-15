@@ -75,7 +75,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
 
                 lines.append(f"**{name}** (ID {steam_id}) - Kills: `{kills}`, Deaths: `{deaths}`, KDR: `{kdr}`, Time: `{playtime_min} min`")
 
-            await interaction.followup.send("
+            await interaction.followup.send("\n".join(lines[:10]))
 ".join(lines[:10]))
 
     except Exception as e:
