@@ -749,6 +749,88 @@ async def show_vips(interaction: discord.Interaction):
         await interaction.followup.send(embed=pages[0], view=view)
         view.message = await interaction.original_response()
 
+@tree.command(name="playerstats", description="Show all-time stats for a player by name")
+@app_commands.describe(player_name="All or part of the player's name")
+async def playerstats(interaction: discord.Interaction, player_name: str):
+    logger.info(f"[/playerstats] Requested by {interaction.user} (ID: {interaction.user.id}), search: {player_name}")
+
+    # Restrict to stats channel only
+    if interaction.channel.id != CHANNEL_ID_STATS:
+        await interaction.response.send_message(
+            "This command can only be used in the stats channel.", ephemeral=True
+        )
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+        with engine.connect() as conn:
+            query = text("""
+                SELECT DISTINCT ON (pn.playersteamid_id)
+                    pn.name, pn.playersteamid_id
+                FROM player_names pn
+                WHERE pn.name ILIKE :search
+                ORDER BY pn.playersteamid_id, pn.last_seen DESC
+                LIMIT 20
+            """)
+            results = conn.execute(query, {"search": f"%{player_name}%"}).fetchall()
+
+        if not results:
+            await interaction.followup.send("No matching players found.")
+            return
+
+        options = [
+            discord.SelectOption(label=row.name[:100], value=str(row.playersteamid_id))
+            for row in results
+        ]
+
+        class PlayerSelect(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=30)
+                self.select = discord.ui.Select(
+                    placeholder="Select a player",
+                    options=options,
+                    min_values=1,
+                    max_values=1,
+                )
+                self.select.callback = self.select_callback
+                self.add_item(self.select)
+
+            async def select_callback(self, select_interaction: discord.Interaction):
+                steam_id = int(self.select.values[0])
+                with engine.connect() as conn:
+                    stats_query = text("""
+                        SELECT kills, deaths, kill_streak, death_streak, kdr, matches_played, win_count, loss_count
+                        FROM player_stats
+                        WHERE playersteamid_id = :steam_id
+                    """)
+                    stats = conn.execute(stats_query, {"steam_id": steam_id}).fetchone()
+
+                if not stats:
+                    await select_interaction.response.send_message("No stats found for this player.", ephemeral=True)
+                    return
+
+                await select_interaction.response.send_message(
+                    f"**Stats for `{steam_id}`:**\n"
+                    f"Kills: {stats.kills}\n"
+                    f"Deaths: {stats.deaths}\n"
+                    f"KDR: {stats.kdr:.2f if stats.kdr is not None else 0}\n"
+                    f"Kill Streak: {stats.kill_streak}\n"
+                    f"Death Streak: {stats.death_streak}\n"
+                    f"Matches Played: {stats.matches_played}\n"
+                    f"Wins: {stats.win_count}\n"
+                    f"Losses: {stats.loss_count}",
+                    ephemeral=True
+                )
+                logger.info(
+                    f"/playerstats used by {interaction.user.display_name} ({interaction.user.id}) "
+                    f"for Steam ID {steam_id}"
+                )
+
+        await interaction.followup.send("Select a player:", view=PlayerSelect())
+
+        await interaction.followup.send("An error occurred while processing your request.", ephemeral=True)
+
+
 # --- Bot startup ---
 
 @client.event
