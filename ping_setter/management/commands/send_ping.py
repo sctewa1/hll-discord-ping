@@ -65,8 +65,6 @@ CHANNEL_ID       = config.get("CHANNEL_ID")
 CHANNEL_ID_STATS = config.get("CHANNEL_ID_stats")
 API_BASE_URL     = config.get("API_BASE_URL")
 API_BEARER_TOKEN = config.get("API_BEARER_TOKEN")
-HLL_DISCORD_UTILS_CONFIG = config.get("HLL_DISCORD_UTILS_CONFIG")
-HLL_DISCORD_UTILS_DIR =  config.get("HLL_DISCORD_UTILS_DIR")
 DB_URL           = config.get("DB_URL")
 
 if not DISCORD_TOKEN or CHANNEL_ID is None or not API_BASE_URL or not API_BEARER_TOKEN:
