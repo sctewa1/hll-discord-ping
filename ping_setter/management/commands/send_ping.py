@@ -54,9 +54,7 @@ def load_config():
         "SCHEDULED_JOB_1_PING": 500,
         "SCHEDULED_JOB_2_TIME": "1500",
         "SCHEDULED_JOB_2_PING": 320,
-        "LOG_DIR": "/opt/ping_setter_hll/logs",
-        "HLL_DISCORD_UTILS_CONFIG": "/opt/hll_discord_utils/config.json",
-        "HLL_DISCORD_UTILS_DIR": "/opt/hll_discord_utils/"
+        "LOG_DIR": "/opt/ping_setter_hll/logs"
     }
 # Load configuration
 config = load_config()
