@@ -132,88 +132,6 @@ def fetch_and_cache_maps() -> bool:
         logger.error(f"Failed to fetch and cache maps: {e}")
         return False
 
-async def map_name_autocomplete(interaction: discord.Interaction, current: str):
-    matches = [
-        pretty_name for pretty_name in cached_maps.values()
-        if current.lower() in pretty_name.lower()
-    ]
-    limited_matches = sorted(set(matches))[:25]
-
-    return [
-        discord.app_commands.Choice(name=match, value=match)
-        for match in limited_matches
-    ]
-
-def restart_hll_utils():
-    try:
-        trigger_path = "/opt/hll_discord_utils/trigger_restart"
-        with open(trigger_path, "w") as f:
-            written = f.write("restart\n")
-            f.flush()
-            os.fsync(f.fileno())
-            logger.info(f"Wrote {written} bytes to trigger file.")
-        logger.info("Created trigger file to restart HLL Discord Utils.")
-    except Exception as e:
-        logger.error(f"Failed to create restart trigger file: {e}")
-        
-# Function to check if map enforcement is already active
-def is_enforce_active():
-    try:
-        with open(HLL_DISCORD_UTILS_CONFIG, "r") as f:
-            config_data = json.load(f)
-        enforce_value = config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforce"]
-        return enforce_value == 1
-    except Exception as e:
-        logger.error(f"Error checking enforce status: {e}")
-        return False
-
-# Function to enable map enforcement
-def enable_enforce(pretty_name: str):
-    try:
-        # Reverse lookup: pretty name -> map ID
-        reverse_map = {v.lower(): k for k, v in cached_maps.items()}
-        map_id = reverse_map.get(pretty_name.lower())
-
-        if not map_id:
-            logger.error(f"Could not find map ID for pretty name '{pretty_name}'")
-            return False
-
-        with open(HLL_DISCORD_UTILS_CONFIG, "r") as f:
-            config_data = json.load(f)
-
-        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforce"] = 1
-        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforced_maps"] = [map_id]
-
-        with open(HLL_DISCORD_UTILS_CONFIG, "w") as f:
-            json.dump(config_data, f, indent=4)
-
-        restart_hll_utils()
-        logger.info(f"Enforced map '{map_id}' (pretty name: '{pretty_name}') and restarted HLL Discord Utils.")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to enforce map '{pretty_name}': {e}")
-        return False
-
-
-# Function to disable map enforcement
-def disable_enforce():
-    try:
-        with open(HLL_DISCORD_UTILS_CONFIG, "r") as f:
-            config_data = json.load(f)
-        
-        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforce"] = 0
-        config_data["rcon"][0]["map_vote"][0]["map_pool"][0]["enforced_maps"] = []
-
-        with open(HLL_DISCORD_UTILS_CONFIG, "w") as f:
-            json.dump(config_data, f, indent=4)
-
-        restart_hll_utils()
-        logger.info("Disabled map enforcement and restarted HLL Discord Utils.")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to disable map enforcement: {e}")
-        return False
-
 def get_max_ping_autokick() -> int | None:
     try:
         r = requests.get(f"{API_BASE_URL}/api/get_server_settings", headers=HEADERS)
@@ -502,63 +420,6 @@ async def online(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("🟢 Bot is online, but failed to reach API.")
 
-# Slash command: /voteEnforceMap
-@tree.command(name="voteenforcemap", description="Enforce a specific map to show up each time in future votes")
-@app_commands.describe(map_name="Name of the map to enforce")
-@app_commands.autocomplete(map_name=map_name_autocomplete)  # Use map_name here instead of map
-async def vote_enforce_map(interaction: discord.Interaction, map_name: str):  # Use map_name in the function signature
-    if is_enforce_active():
-        await interaction.response.send_message(
-            embed=Embed(
-                title="⚠️ Error",
-                description="Enforced map voting is already enabled. Please run `/voteDisableEnforce` first.",
-                color=discord.Color.red()
-            ),
-            ephemeral=True
-        )
-        return
-
-    if enable_enforce(map_name):
-        await interaction.response.send_message(
-            embed=Embed(
-                title="✅ Success",
-                description=f"Map vote enforcement enabled for **{map_name}** and HLL Discord Utils restarted.",
-                color=discord.Color.green()
-            ),
-            ephemeral=True
-        )
-    else:
-        await interaction.response.send_message(
-            embed=Embed(
-                title="❌ Error",
-                description="Failed to enforce map. Please check logs for details.",
-                color=discord.Color.red()
-            ),
-            ephemeral=True
-        )
-
-# Slash command: /voteDisableEnforce
-@tree.command(name="votedisableenforce", description="Disable enforced map voting")
-async def vote_disable_enforce(interaction: discord.Interaction):
-    if disable_enforce():
-        await interaction.response.send_message(
-            embed=Embed(
-                title="✅ Success",
-                description="Map vote enforcement disabled and HLL Discord Utils restarted.",
-                color=discord.Color.green()
-            ),
-            ephemeral=True
-        )
-    else:
-        await interaction.response.send_message(
-            embed=Embed(
-                title="❌ Error",
-                description="Failed to disable map enforcement. Please check logs for details.",
-                color=discord.Color.red()
-            ),
-            ephemeral=True
-        )
-
 @tree.command(name="help", description="Show this help message")
 async def help_command(interaction: discord.Interaction):
     logger.info(f"[/help] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -574,11 +435,9 @@ async def help_command(interaction: discord.Interaction):
         "/setping - Set max ping autokick value (in ms)\n"
         "/curscheduledtime - Show current scheduled job times and ping values\n"
         "/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
-        "/online - Check if bot and API are running\n\n"
-	"/showvips - Display a paginated list of temporary VIPs and how long they have left\n"
-        "/xxvoteenforcemap - **NOT READY***Enforce a specific map to show up each time in future votes\n"
-        "/xxvoteisableenforce - **NOT READY**Disable enforced map voting\n"
         
+	"/showvips - Display a paginated list of temporary VIPs and how long they have left\n"
+        "/online - Check if bot and API are running\n\n"
         "/help - Show this help message"
     )
     await interaction.response.send_message(msg)
