@@ -1,6 +1,7 @@
 {
     DISCORD_TOKEN: "<go find your big long number",
     CHANNEL_ID: 1123556,
+    CHANNEL_ID_stats: 1394286323447365642,
     API_BEARER_TOKEN: "DJANGO token from RCON",
     API_BASE_URL: "should know this probablky will end in :8010",
     DB_URL: "postgresql://rcon:YOURdbPASSWORDinEnvFileForRCON@postgres:5432/rcon",
@@ -9,9 +10,5 @@
     SCHEDULED_JOB_1_PING: 550,
     SCHEDULED_JOB_2_TIME: "1512",
     SCHEDULED_JOB_2_PING: 320,
-    USER_ID: 1004,
-    GROUP_ID: 1004,
-    LOG_DIR: "/opt/ping_setter_hll/logs",
-    HLL_DISCORD_UTILS_CONFIG: "/opt/hll_discord_utils/config.json",
-    HLL_DISCORD_UTILS_DIR: "/opt/hll_discord_utils/"
+    LOG_DIR: "/opt/ping_setter_hll/logs"
 }
