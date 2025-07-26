@@ -3,6 +3,7 @@
     CHANNEL_ID: 1123556,
     API_BEARER_TOKEN: "DJANGO token from RCON",
     API_BASE_URL: "should know this probablky will end in :8010",
+    DB_URL: "postgresql://rcon:YOURdbPASSWORDinEnvFileForRCON@postgres:5432/rcon",
     TIMEZONE: "Australia/Sydney",
     SCHEDULED_JOB_1_TIME: "2345",
     SCHEDULED_JOB_1_PING: 550,
