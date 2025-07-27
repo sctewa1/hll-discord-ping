@@ -10,5 +10,8 @@
     SCHEDULED_JOB_1_PING: 550,
     SCHEDULED_JOB_2_TIME: "1512",
     SCHEDULED_JOB_2_PING: 320,
+    SCHEDULED_VIP_TIME: "1200",
+    SCHEDULED_VIP_CHANNEL: null,
+    SCHEDULED_VIP_ENABLED: false,
     LOG_DIR: "/opt/ping_setter_hll/logs"
 }
