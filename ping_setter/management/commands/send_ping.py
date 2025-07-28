@@ -194,6 +194,17 @@ async def scheduled_ping_job(job_id: str, time_str: str, ping: int):
             await ch.send(f"🔄 [{job_id}] Max ping autokick set to `{ping}` ms (Scheduled {h}:{m})")
     else:
         logger.warning(f"[{job_id}] Failed to set max ping {ping}")
+	    
+#  Only run for the second scheduled job to show vip stats
+    if job_id == "set_ping_job_2":
+        stats_channel_id = config.get("CHANNEL_ID_VIPstats")
+        if stats_channel_id:
+            stats_channel = client.get_channel(stats_channel_id)
+            if stats_channel:
+                await stats_channel.send("/showvips")
+                logger.info(f"[{job_id}] /showvips sent to CHANNEL_ID_VIPstats")
+            else:
+                logger.warning(f"[{job_id}] stats channel not found for ID {stats_channel_id}")
 
 # --- Reschedule helper ---
 def reschedule_job(job_id: str, time_str: str, ping: int):
