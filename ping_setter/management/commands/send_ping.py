@@ -193,18 +193,7 @@ async def scheduled_ping_job(job_id: str, time_str: str, ping: int):
         if ch:
             await ch.send(f"🔄 [{job_id}] Max ping autokick set to `{ping}` ms (Scheduled {h}:{m})")
     else:
-        logger.warning(f"[{job_id}] Failed to set max ping {ping}")
-	    
-#  Only run for the second scheduled job to show vip stats
-    if job_id == "set_ping_job_2":
-        stats_channel_id = config.get("CHANNEL_ID_VIPstats")
-        if stats_channel_id:
-            stats_channel = client.get_channel(stats_channel_id)
-            if stats_channel:
-                await stats_channel.send("/showvips")
-                logger.info(f"[{job_id}] /showvips sent to CHANNEL_ID_VIPstats")
-            else:
-                logger.warning(f"[{job_id}] stats channel not found for ID {stats_channel_id}")
+        logger.warning(f"[{job_id}] Failed to set max ping {ping}")   
 
 # --- Reschedule helper ---
 def reschedule_job(job_id: str, time_str: str, ping: int):
@@ -535,9 +524,18 @@ async def bantemp(interaction: discord.Interaction, name_prefix: str):
     await interaction.followup.send("Select the player to temp-ban:", view=PlayerView())
 
 @tree.command(name="showvips", description="Show all temporary VIPs by time remaining")
+@cooldown(rate=1, per=3600.0)
 async def show_vips(interaction: discord.Interaction):
+    # Restrict to #general only
+    if interaction.channel.id != CHANNEL_ID_VIPstats:
+        await interaction.response.send_message(
+            "⚠️ You can only run this command in #general.",
+            ephemeral=True
+        )
+        return
+
     logger.info(f"[/showvips] Requested by {interaction.user} (ID: {interaction.user.id})")
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
 
     vip_url = f"{API_BASE_URL}/api/get_vip_ids"
 
@@ -547,7 +545,7 @@ async def show_vips(interaction: discord.Interaction):
                 data = await resp.json()
     except Exception as e:
         logger.error(f"Failed to fetch VIP data: {e}")
-        return await interaction.followup.send("❌ Error fetching VIP data.")
+        return await interaction.followup.send("❌ Error fetching VIP data.", ephemeral=True)
 
     from datetime import timezone as dt_timezone
     now = datetime.now(dt_timezone.utc)
@@ -567,7 +565,7 @@ async def show_vips(interaction: discord.Interaction):
             continue
 
     if not vip_entries:
-        await interaction.followup.send("⚠️ No temporary VIPs found.")
+        await interaction.followup.send("⚠️ No temporary VIPs found.", ephemeral=True)
         return
 
     # Sort by longest remaining time
@@ -595,8 +593,11 @@ async def show_vips(interaction: discord.Interaction):
         embed.set_footer(text=f"{i + 1}–{min(i + per_page, len(vip_entries))} of {len(vip_entries)}")
         pages.append(embed)
 
+    # Log public message in #general
+    await interaction.channel.send(f"👀 {interaction.user.display_name} reviewed VIPs")
+
     if len(pages) == 1:
-        await interaction.followup.send(embed=pages[0])
+        await interaction.followup.send(embed=pages[0], ephemeral=True)
     else:
         class Paginator(discord.ui.View):
             def __init__(self):
@@ -620,7 +621,7 @@ async def show_vips(interaction: discord.Interaction):
                     await interaction_.response.edit_message(embed=pages[self.page], view=self)
 
         view = Paginator()
-        await interaction.followup.send(embed=pages[0], view=view)
+        await interaction.followup.send(embed=pages[0], view=view, ephemeral=True)
         view.message = await interaction.original_response()
 
 
