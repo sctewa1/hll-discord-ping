@@ -740,13 +740,12 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
             earlier_kdr = earlier_kills / earlier_deaths if earlier_deaths else 0
             earlier_hours = (total_seconds - recent_seconds) // 3600
 
-            player_display_name = next((r.name for r in results if str(r.playersteamid_id) == self.select.values[0]), "Unknown Player")
-            requester = select_interaction.user.display_name
-
-            embed = Embed(
-                title=f"📊 {requester} requested stats for `{player_display_name}`",
-                color=discord.Color.blurple()
-            )
+            with engine.connect() as conn:
+                name_result = conn.execute(
+                    text("SELECT name FROM player_names WHERE playersteamid_id = :steam_id ORDER BY last_seen DESC LIMIT 1"),
+                    {"steam_id": steam_id}
+                ).fetchone()
+                player_display_name = name_result.name if name_result else "Unknown Player"
 
             embed.add_field(
                 name="🏅 All-Time Totals",
