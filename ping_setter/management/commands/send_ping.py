@@ -740,7 +740,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
             earlier_kdr = earlier_kills / earlier_deaths if earlier_deaths else 0
             earlier_hours = (total_seconds - recent_seconds) // 3600
 
-            player_display_name = results[0].name
+            player_display_name = next((r.name for r in results if str(r.playersteamid_id) == self.select.values[0]), "Unknown Player")
             requester = select_interaction.user.display_name
 
             embed = Embed(
