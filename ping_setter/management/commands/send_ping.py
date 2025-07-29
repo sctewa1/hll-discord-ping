@@ -712,6 +712,19 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                 """)
                 recent_rows = conn.execute(monthly_query, {"steam_id": steam_id}).fetchall()
 
+                # Correct display name lookup
+                name_result = conn.execute(
+                    text("""
+                        SELECT name
+                        FROM player_names
+                        WHERE playersteamid_id = :steam_id
+                        ORDER BY last_seen DESC
+                        LIMIT 1
+                    """),
+                    {"steam_id": steam_id}
+                ).fetchone()
+                player_display_name = name_result.name if name_result else "Unknown Player"
+
             total_kills = all_time.total_kills or 0
             total_deaths = all_time.total_deaths or 0
             matches_played = all_time.matches_played or 0
@@ -740,12 +753,12 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
             earlier_kdr = earlier_kills / earlier_deaths if earlier_deaths else 0
             earlier_hours = (total_seconds - recent_seconds) // 3600
 
-            with engine.connect() as conn:
-                name_result = conn.execute(
-                    text("SELECT name FROM player_names WHERE playersteamid_id = :steam_id ORDER BY last_seen DESC LIMIT 1"),
-                    {"steam_id": steam_id}
-                ).fetchone()
-                player_display_name = name_result.name if name_result else "Unknown Player"
+            requester = select_interaction.user.display_name
+
+            embed = Embed(
+                title=f"📊 {requester} requested stats for `{player_display_name}`",
+                color=discord.Color.blurple()
+            )
 
             embed.add_field(
                 name="🏅 All-Time Totals",
