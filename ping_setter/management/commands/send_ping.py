@@ -811,7 +811,7 @@ async def on_ready():
             scheduler.start()
             logger.info("Scheduler started and jobs scheduled.")
 
-        # Notify in channel
+        # Notify in channel.. Edit 3 lines below to be quiet
         #channel = await client.fetch_channel(CHANNEL_ID)
         #await channel.send("🟢 Bot is online!")
         #logger.info("Sent online notification to the channel.")
