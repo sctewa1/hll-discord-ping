@@ -524,7 +524,7 @@ async def bantemp(interaction: discord.Interaction, name_prefix: str):
     await interaction.followup.send("Select the player to temp-ban:", view=PlayerView())
 
 @tree.command(name="showvips", description="Show all temporary VIPs by time remaining")
-@cooldown(rate=1, per=3600.0)
+@app_commands.checks.cooldown(1, 3600.0)
 async def show_vips(interaction: discord.Interaction):
     # Restrict to #general only
     if interaction.channel.id != CHANNEL_ID_VIPstats:
