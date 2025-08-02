@@ -658,8 +658,12 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
         await interaction.followup.send("No matching players found.")
         return
 
+    # Combine steam_id and name into value so we keep the exact selected name
     options = [
-        discord.SelectOption(label=row.name[:100], value=str(row.playersteamid_id))
+        discord.SelectOption(
+            label=row.name[:100],
+            value=f"{row.playersteamid_id}|{row.name[:100]}"
+        )
         for row in results
     ]
 
@@ -676,7 +680,8 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
             self.add_item(self.select)
 
         async def select_callback(self, select_interaction: discord.Interaction):
-            steam_id = int(self.select.values[0])
+            steam_id_str, player_display_name = self.select.values[0].split("|")
+            steam_id = int(steam_id_str)
 
             with engine.connect() as conn:
                 # All-time stats
@@ -712,19 +717,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                 """)
                 recent_rows = conn.execute(monthly_query, {"steam_id": steam_id}).fetchall()
 
-                # Correct display name lookup
-                name_result = conn.execute(
-                    text("""
-                        SELECT name
-                        FROM player_names
-                        WHERE playersteamid_id = :steam_id
-                        ORDER BY last_seen DESC
-                        LIMIT 1
-                    """),
-                    {"steam_id": steam_id}
-                ).fetchone()
-                player_display_name = name_result.name if name_result else "Unknown Player"
-
+            # Compute stats
             total_kills = all_time.total_kills or 0
             total_deaths = all_time.total_deaths or 0
             matches_played = all_time.matches_played or 0
@@ -819,9 +812,9 @@ async def on_ready():
             logger.info("Scheduler started and jobs scheduled.")
 
         # Notify in channel
-        channel = await client.fetch_channel(CHANNEL_ID)
-        await channel.send("🟢 Bot is online!")
-        logger.info("Sent online notification to the channel.")
+        #channel = await client.fetch_channel(CHANNEL_ID)
+        #await channel.send("🟢 Bot is online!")
+        #logger.info("Sent online notification to the channel.")
 
     except Exception as e:
         logger.exception("Error during on_ready sequence")  # This logs full traceback
