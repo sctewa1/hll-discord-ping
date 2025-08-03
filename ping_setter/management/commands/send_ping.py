@@ -193,7 +193,7 @@ async def scheduled_ping_job(job_id: str, time_str: str, ping: int):
         if ch:
             await ch.send(f"🔄 [{job_id}] Max ping autokick set to `{ping}` ms (Scheduled {h}:{m})")
     else:
-        logger.warning(f"[{job_id}] Failed to set max ping {ping}")
+        logger.warning(f"[{job_id}] Failed to set max ping {ping}")   
 
 # --- Reschedule helper ---
 def reschedule_job(job_id: str, time_str: str, ping: int):
@@ -524,9 +524,18 @@ async def bantemp(interaction: discord.Interaction, name_prefix: str):
     await interaction.followup.send("Select the player to temp-ban:", view=PlayerView())
 
 @tree.command(name="showvips", description="Show all temporary VIPs by time remaining")
+@app_commands.checks.cooldown(1, 3600.0)
 async def show_vips(interaction: discord.Interaction):
+    # Restrict to #general only
+    if interaction.channel.id != CHANNEL_ID_VIPstats:
+        await interaction.response.send_message(
+            "⚠️ You can only run this command in #general.",
+            ephemeral=True
+        )
+        return
+
     logger.info(f"[/showvips] Requested by {interaction.user} (ID: {interaction.user.id})")
-    await interaction.response.defer()
+    await interaction.response.defer(ephemeral=True)
 
     vip_url = f"{API_BASE_URL}/api/get_vip_ids"
 
@@ -536,7 +545,7 @@ async def show_vips(interaction: discord.Interaction):
                 data = await resp.json()
     except Exception as e:
         logger.error(f"Failed to fetch VIP data: {e}")
-        return await interaction.followup.send("❌ Error fetching VIP data.")
+        return await interaction.followup.send("❌ Error fetching VIP data.", ephemeral=True)
 
     from datetime import timezone as dt_timezone
     now = datetime.now(dt_timezone.utc)
@@ -556,7 +565,7 @@ async def show_vips(interaction: discord.Interaction):
             continue
 
     if not vip_entries:
-        await interaction.followup.send("⚠️ No temporary VIPs found.")
+        await interaction.followup.send("⚠️ No temporary VIPs found.", ephemeral=True)
         return
 
     # Sort by longest remaining time
@@ -584,8 +593,11 @@ async def show_vips(interaction: discord.Interaction):
         embed.set_footer(text=f"{i + 1}–{min(i + per_page, len(vip_entries))} of {len(vip_entries)}")
         pages.append(embed)
 
+    # Log public message in #general
+    await interaction.channel.send(f"👀 {interaction.user.display_name} reviewed VIPs")
+
     if len(pages) == 1:
-        await interaction.followup.send(embed=pages[0])
+        await interaction.followup.send(embed=pages[0], ephemeral=True)
     else:
         class Paginator(discord.ui.View):
             def __init__(self):
@@ -609,7 +621,7 @@ async def show_vips(interaction: discord.Interaction):
                     await interaction_.response.edit_message(embed=pages[self.page], view=self)
 
         view = Paginator()
-        await interaction.followup.send(embed=pages[0], view=view)
+        await interaction.followup.send(embed=pages[0], view=view, ephemeral=True)
         view.message = await interaction.original_response()
 
 
@@ -621,7 +633,7 @@ from discord import Embed
 async def playerstats(interaction: discord.Interaction, player_name: str):
     logger.info(f"[/playerstats] Requested by {interaction.user} (ID: {interaction.user.id}), search: {player_name}")
 
-    # Restrict to stats channel only
+      # Restrict to stats channel only
     if interaction.channel.id != CHANNEL_ID_STATS:
         await interaction.response.send_message(
             "This command can only be used in the stats channel.", ephemeral=True
@@ -633,21 +645,32 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
     # Search for players
     with engine.connect() as conn:
         query = text("""
-            SELECT DISTINCT ON (pn.playersteamid_id)
-                pn.name, pn.playersteamid_id
-            FROM player_names pn
-            WHERE pn.name ILIKE :search
-            ORDER BY pn.playersteamid_id, pn.last_seen DESC
+            SELECT name, playersteamid_id
+            FROM (
+                SELECT DISTINCT ON (pn.playersteamid_id)
+                    pn.playersteamid_id,
+                    pn.name,
+                    pn.last_seen
+                FROM player_names pn
+                WHERE pn.name ILIKE :search
+                ORDER BY pn.playersteamid_id, pn.last_seen DESC
+            ) sub
+            ORDER BY sub.last_seen DESC
             LIMIT 20
         """)
-        results = conn.execute(query, {"search": f"%{player_name}%"}).fetchall()
+        results = conn.execute(query, {"search": f"{player_name}%"}).fetchall()
 
     if not results:
         await interaction.followup.send("No matching players found.")
         return
 
+
+    # Combine steam_id and name into value so we keep the exact selected name
     options = [
-        discord.SelectOption(label=row.name[:100], value=str(row.playersteamid_id))
+        discord.SelectOption(
+            label=row.name[:100],
+            value=f"{row.playersteamid_id}|{row.name[:100]}"
+        )
         for row in results
     ]
 
@@ -664,7 +687,8 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
             self.add_item(self.select)
 
         async def select_callback(self, select_interaction: discord.Interaction):
-            steam_id = int(self.select.values[0])
+            steam_id_str, player_display_name = self.select.values[0].split("|")
+            steam_id = int(steam_id_str)
 
             with engine.connect() as conn:
                 # All-time stats
@@ -700,6 +724,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                 """)
                 recent_rows = conn.execute(monthly_query, {"steam_id": steam_id}).fetchall()
 
+            # Compute stats
             total_kills = all_time.total_kills or 0
             total_deaths = all_time.total_deaths or 0
             matches_played = all_time.matches_played or 0
@@ -728,7 +753,6 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
             earlier_kdr = earlier_kills / earlier_deaths if earlier_deaths else 0
             earlier_hours = (total_seconds - recent_seconds) // 3600
 
-            player_display_name = results[0].name
             requester = select_interaction.user.display_name
 
             embed = Embed(
@@ -794,7 +818,7 @@ async def on_ready():
             scheduler.start()
             logger.info("Scheduler started and jobs scheduled.")
 
-        # Notify in channel
+        # Notify in channel.. Edit 3 lines below to be quiet
         channel = await client.fetch_channel(CHANNEL_ID)
         await channel.send("🟢 Bot is online!")
         logger.info("Sent online notification to the channel.")
