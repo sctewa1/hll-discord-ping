@@ -649,10 +649,10 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                 pn.name, pn.playersteamid_id
             FROM player_names pn
             WHERE pn.name ILIKE :search
-            ORDER BY pn.playersteamid_id, pn.last_seen DESC
+            ORDER BY pn.last_seen DESC, pn.playersteamid_id
             LIMIT 20
         """)
-        results = conn.execute(query, {"search": f"%{player_name}%"}).fetchall()
+        results = conn.execute(query, {"search": f"{player_name}%"}).fetchall()
 
     if not results:
         await interaction.followup.send("No matching players found.")
