@@ -633,7 +633,7 @@ from discord import Embed
 async def playerstats(interaction: discord.Interaction, player_name: str):
     logger.info(f"[/playerstats] Requested by {interaction.user} (ID: {interaction.user.id}), search: {player_name}")
 
-    # Restrict to stats channel only
+      # Restrict to stats channel only
     if interaction.channel.id != CHANNEL_ID_STATS:
         await interaction.response.send_message(
             "This command can only be used in the stats channel.", ephemeral=True
@@ -645,24 +645,25 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
     # Search for players
     with engine.connect() as conn:
         query = text("""
-	    SELECT name, playersteamid_id
-	    FROM (
-	        SELECT DISTINCT ON (pn.playersteamid_id)
-	            pn.playersteamid_id,
-	            pn.name,
-	            pn.last_seen
-	        FROM player_names pn
-	        WHERE pn.name ILIKE :search
-	        ORDER BY pn.playersteamid_id, pn.last_seen DESC
-	    ) sub
-	    ORDER BY sub.last_seen DESC
-	    LIMIT 20
-	""")
-	results = conn.execute(query, {"search": f"{player_name}%"}).fetchall()
+            SELECT name, playersteamid_id
+            FROM (
+                SELECT DISTINCT ON (pn.playersteamid_id)
+                    pn.playersteamid_id,
+                    pn.name,
+                    pn.last_seen
+                FROM player_names pn
+                WHERE pn.name ILIKE :search
+                ORDER BY pn.playersteamid_id, pn.last_seen DESC
+            ) sub
+            ORDER BY sub.last_seen DESC
+            LIMIT 20
+        """)
+        results = conn.execute(query, {"search": f"{player_name}%"}).fetchall()
 
     if not results:
         await interaction.followup.send("No matching players found.")
         return
+
 
     # Combine steam_id and name into value so we keep the exact selected name
     options = [
