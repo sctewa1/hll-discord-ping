@@ -697,11 +697,11 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                 all_time_query = text("""
                     SELECT
                         COUNT(*) AS matches_played,
-                        SUM(kills) AS total_kills,
-                        SUM(deaths) AS total_deaths,
-                        MAX(kills_streak) AS best_kill_streak,
-                        AVG(kill_death_ratio) AS avg_kdr,
-                        SUM(time_seconds) AS total_time_seconds
+                        COALESCE(SUM(kills),0) AS total_kills,
+                        COALESCE(SUM(deaths),0) AS total_deaths,
+                        COALESCE(MAX(kills_streak),0) AS best_kill_streak,
+                        COALESCE(AVG(kill_death_ratio),0) AS avg_kdr,
+                        COALESCE(SUM(time_seconds),0) AS total_time_seconds
                     FROM player_stats
                     WHERE playersteamid_id = :steam_id
                 """)
@@ -712,19 +712,45 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                     SELECT
                         TO_CHAR(m.start, 'YYYY-MM') AS month,
                         COUNT(*) AS matches,
-                        SUM(kills) AS kills,
-                        SUM(deaths) AS deaths,
-                        MAX(kills_streak) AS best_kill_streak,
-                        AVG(kill_death_ratio) AS avg_kdr,
-                        SUM(time_seconds) AS time_seconds
+                        COALESCE(SUM(kills),0) AS kills,
+                        COALESCE(SUM(deaths),0) AS deaths,
+                        COALESCE(MAX(kills_streak),0) AS best_kill_streak,
+                        COALESCE(AVG(kill_death_ratio),0) AS avg_kdr,
+                        COALESCE(SUM(time_seconds),0) AS time_seconds
                     FROM player_stats ps
                     JOIN map_history m ON ps.map_id = m.id
                     WHERE ps.playersteamid_id = :steam_id
+                    AND m.start >= NOW() - INTERVAL '6 months'
                     GROUP BY month
                     ORDER BY month DESC
                     LIMIT 6
                 """)
                 recent_rows = conn.execute(monthly_query, {"steam_id": steam_id}).fetchall()
+
+                # Earlier stats (excluding recent months)
+                earlier_query = text("""
+                    SELECT
+                        COUNT(*) AS matches,
+                        COALESCE(SUM(kills),0) AS kills,
+                        COALESCE(SUM(deaths),0) AS deaths,
+                        COALESCE(AVG(kill_death_ratio),0) AS avg_kdr,
+                        COALESCE(SUM(time_seconds),0) AS time_seconds
+                    FROM player_stats ps
+                    JOIN map_history m ON ps.map_id = m.id
+                    WHERE ps.playersteamid_id = :steam_id
+                    AND m.start < NOW() - INTERVAL '6 months'
+                """)
+                earlier_row = conn.execute(earlier_query, {"steam_id": steam_id}).fetchone()
+
+                # Earlier best streak only (exclude recent months)
+                earlier_streak_query = text("""
+                    SELECT COALESCE(MAX(kills_streak),0) AS best_kill_streak
+                    FROM player_stats ps
+                    JOIN map_history m ON ps.map_id = m.id
+                    WHERE ps.playersteamid_id = :steam_id
+                    AND m.start < NOW() - INTERVAL '6 months'
+                """)
+                earlier_best_streak = conn.execute(earlier_streak_query, {"steam_id": steam_id}).scalar() or 0
 
             # Compute stats
             total_kills = all_time.total_kills or 0
@@ -742,18 +768,13 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                 short_month = calendar.month_abbr[int(row.month[-2:])]
                 return f"📆 {short_month} — {row.kills} / {row.deaths} / {row.matches} / {kdr} 🎯 {row.best_kill_streak} 🕒 {hours}h"
 
-            recent_kills = sum(r.kills for r in recent_rows)
-            recent_deaths = sum(r.deaths for r in recent_rows)
-            recent_matches = sum(r.matches for r in recent_rows)
-            recent_seconds = sum(r.time_seconds for r in recent_rows)
-
             monthly_lines = [format_month_row(r) for r in recent_rows]
 
-            earlier_kills = total_kills - recent_kills
-            earlier_deaths = total_deaths - recent_deaths
-            earlier_games = matches_played - recent_matches
+            earlier_kills = earlier_row.kills or 0
+            earlier_deaths = earlier_row.deaths or 0
+            earlier_games = earlier_row.matches or 0
             earlier_kdr = earlier_kills / earlier_deaths if earlier_deaths else 0
-            earlier_hours = (total_seconds - recent_seconds) // 3600
+            earlier_hours = (earlier_row.time_seconds or 0) // 3600
 
             requester = select_interaction.user.display_name
 
@@ -776,7 +797,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
 
             embed.add_field(
                 name="🗓️ Last 6 Months (K/D/G/R 🎯 🕒)",
-                value="\n".join(monthly_lines),
+                value="\n".join(monthly_lines) if monthly_lines else "No matches",
                 inline=False
             )
 
@@ -784,7 +805,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                 name="📦 Earlier",
                 value=(
                     f"{earlier_kills} / {earlier_deaths} / {earlier_games} / "
-                    f"{earlier_kdr:.2f} 🎯 {best_kill_streak} 🕒 {earlier_hours}h"
+                    f"{earlier_kdr:.2f} 🎯 {earlier_best_streak} 🕒 {earlier_hours}h"
                 ),
                 inline=False
             )
