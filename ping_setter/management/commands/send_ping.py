@@ -529,7 +529,7 @@ async def bantemp(interaction: discord.Interaction, name_prefix: str):
 @app_commands.checks.cooldown(1, 3600.0)
 async def show_vips(interaction: discord.Interaction):
     # Restrict to #general only
-    if interaction.channel.id != CHANNEL_ID_VIPstats:
+    if interaction.channel.id != CHANNEL_ID_VIPSTATS:
         await interaction.response.send_message(
             "⚠️ You can only run this command in #general.",
             ephemeral=True
@@ -821,9 +821,9 @@ async def on_ready():
             logger.info("Scheduler started and jobs scheduled.")
 
         # Notify in channel.. Edit 3 lines below to be quiet
-        channel = await client.fetch_channel(CHANNEL_ID)
-        await channel.send("🟢 Bot is online!")
-        logger.info("Sent online notification to the channel.")
+        #channel = await client.fetch_channel(CHANNEL_ID)
+        #await channel.send("🟢 Bot is online!")
+        #logger.info("Sent online notification to the channel.")
 
     except Exception as e:
         logger.exception("Error during on_ready sequence")  # This logs full traceback
