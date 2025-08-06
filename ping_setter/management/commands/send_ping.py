@@ -723,7 +723,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                     AND m.start >= NOW() - INTERVAL '6 months'
                     GROUP BY month
                     ORDER BY month DESC
-                    LIMIT 6
+                    LIMIT 12
                 """)
                 recent_rows = conn.execute(monthly_query, {"steam_id": steam_id}).fetchall()
 
@@ -748,7 +748,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                     FROM player_stats ps
                     JOIN map_history m ON ps.map_id = m.id
                     WHERE ps.playersteamid_id = :steam_id
-                    AND m.start < NOW() - INTERVAL '6 months'
+                    AND m.start < NOW() - INTERVAL '12 months'
                 """)
                 earlier_best_streak = conn.execute(earlier_streak_query, {"steam_id": steam_id}).scalar() or 0
 
@@ -796,7 +796,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
             )
 
             embed.add_field(
-                name="🗓️ Last 6 Months (K/D/G/R 🎯 🕒)",
+                name="🗓️ Last 12 Months (K/D/G/R 🎯 🕒)",
                 value="\n".join(monthly_lines) if monthly_lines else "No matches",
                 inline=False
             )
