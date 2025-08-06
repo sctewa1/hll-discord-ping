@@ -707,7 +707,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                 """)
                 all_time = conn.execute(all_time_query, {"steam_id": steam_id}).fetchone()
 
-                # Last 6 months
+                # Last 12 months
                 monthly_query = text("""
                     SELECT
                         TO_CHAR(m.start, 'YYYY-MM') AS month,
@@ -720,7 +720,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                     FROM player_stats ps
                     JOIN map_history m ON ps.map_id = m.id
                     WHERE ps.playersteamid_id = :steam_id
-                    AND m.start >= NOW() - INTERVAL '6 months'
+                    AND m.start >= NOW() - INTERVAL '12 months'
                     GROUP BY month
                     ORDER BY month DESC
                     LIMIT 12
