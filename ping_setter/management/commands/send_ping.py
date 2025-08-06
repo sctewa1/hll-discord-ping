@@ -738,7 +738,7 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                     FROM player_stats ps
                     JOIN map_history m ON ps.map_id = m.id
                     WHERE ps.playersteamid_id = :steam_id
-                    AND m.start < NOW() - INTERVAL '6 months'
+                    AND m.start < NOW() - INTERVAL '12 months'
                 """)
                 earlier_row = conn.execute(earlier_query, {"steam_id": steam_id}).fetchone()
 
