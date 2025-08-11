@@ -696,35 +696,35 @@ async def playerstats(interaction: discord.Interaction, player_name: str):
                 # All-time stats
                 all_time_query = text("""
                     SELECT
-                        COUNT(*) AS matches_played,
-                        COALESCE(SUM(kills),0) AS total_kills,
-                        COALESCE(SUM(deaths),0) AS total_deaths,
-                        COALESCE(MAX(kills_streak),0) AS best_kill_streak,
-                        COALESCE(AVG(kill_death_ratio),0) AS avg_kdr,
-                        COALESCE(SUM(time_seconds),0) AS total_time_seconds
-                    FROM player_stats
-                    WHERE playersteamid_id = :steam_id
+				        COUNT(*) AS matches_played,
+				        COALESCE(SUM(kills),0) AS total_kills,
+				        COALESCE(SUM(deaths),0) AS total_deaths,
+				        COALESCE(MAX(kills_streak),0) AS best_kill_streak,
+				        COALESCE(ROUND(SUM(kills)::numeric / NULLIF(SUM(deaths),0), 2), 0) AS avg_kdr,
+				        COALESCE(SUM(time_seconds),0) AS total_time_seconds
+				    FROM player_stats
+				    WHERE playersteamid_id = :steam_id
                 """)
                 all_time = conn.execute(all_time_query, {"steam_id": steam_id}).fetchone()
 
-                # Last 12 months
-                monthly_query = text("""
+               # Last 12 months — month bucket + K/D from monthly totals (Sydney time)
+				monthly_query = text("""
                     SELECT
-                        TO_CHAR(m.start, 'YYYY-MM') AS month,
-                        COUNT(*) AS matches,
-                        COALESCE(SUM(kills),0) AS kills,
-                        COALESCE(SUM(deaths),0) AS deaths,
-                        COALESCE(MAX(kills_streak),0) AS best_kill_streak,
-                        COALESCE(AVG(kill_death_ratio),0) AS avg_kdr,
-                        COALESCE(SUM(time_seconds),0) AS time_seconds
-                    FROM player_stats ps
-                    JOIN map_history m ON ps.map_id = m.id
-                    WHERE ps.playersteamid_id = :steam_id
-                    AND m.start >= NOW() - INTERVAL '12 months'
-                    GROUP BY month
-                    ORDER BY month DESC
-                    LIMIT 12
-                """)
+				        TO_CHAR(date_trunc('month', (m.start AT TIME ZONE 'Australia/Sydney')), 'YYYY-MM') AS month,
+				        COUNT(*) AS matches,
+				        COALESCE(SUM(ps.kills),0) AS kills,
+				        COALESCE(SUM(ps.deaths),0) AS deaths,
+				        COALESCE(MAX(ps.kills_streak),0) AS best_kill_streak,
+				        COALESCE(ROUND(SUM(ps.kills)::numeric / NULLIF(SUM(ps.deaths),0), 2), 0) AS avg_kdr,
+				        COALESCE(SUM(ps.time_seconds),0) AS time_seconds
+				    FROM player_stats ps
+				    JOIN map_history m ON ps.map_id = m.id
+				    WHERE ps.playersteamid_id = :steam_id
+				      AND (m.start AT TIME ZONE 'Australia/Brisbane') >= (now() AT TIME ZONE 'Australia/Sydney') - INTERVAL '12 months'
+				    GROUP BY 1
+				    ORDER BY 1 DESC
+				    LIMIT 12
+				""")
                 recent_rows = conn.execute(monthly_query, {"steam_id": steam_id}).fetchall()
 
                 # Earlier stats (excluding recent months)
