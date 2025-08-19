@@ -54,6 +54,9 @@ def load_config():
         "SCHEDULED_JOB_1_PING": 500,
         "SCHEDULED_JOB_2_TIME": "1500",
         "SCHEDULED_JOB_2_PING": 320,
+        "SCHEDULED_VIP_TIME": "1200",
+        "SCHEDULED_VIP_CHANNEL": None,
+        "SCHEDULED_VIP_ENABLED": False,
         "LOG_DIR": "/opt/ping_setter_hll/logs"
     }
 # Load configuration
@@ -195,34 +198,151 @@ async def scheduled_ping_job(job_id: str, time_str: str, ping: int):
     else:
         logger.warning(f"[{job_id}] Failed to set max ping {ping}")   
 
+async def scheduled_vip_job():
+    """Scheduled job to automatically post VIP list"""
+    logger.info("[SCHEDULED_VIP] Running scheduled VIP list job")
+    
+    vip_channel_id = config.get("SCHEDULED_VIP_CHANNEL")
+    if not vip_channel_id:
+        logger.warning("[SCHEDULED_VIP] No VIP channel configured")
+        return
+    
+    channel = client.get_channel(vip_channel_id)
+    if not channel:
+        logger.error(f"[SCHEDULED_VIP] Could not find channel with ID {vip_channel_id}")
+        return
+
+    # Fetch VIP data
+    vip_url = f"{API_BASE_URL}/api/get_vip_ids"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(vip_url, headers=HEADERS) as resp:
+                data = await resp.json()
+    except Exception as e:
+        logger.error(f"[SCHEDULED_VIP] Failed to fetch VIP data: {e}")
+        await channel.send("❌ Error fetching VIP data for scheduled update.")
+        return
+
+    from datetime import timezone as dt_timezone
+    now = datetime.now(dt_timezone.utc)
+    vip_entries = []
+
+    for entry in data.get("result", []):
+        vip_exp = entry.get("vip_expiration")
+        if vip_exp == "3000-01-01T00:00:00+00:00":
+            continue  # skip permanent VIPs
+        try:
+            expires_at = datetime.fromisoformat(vip_exp)
+            if expires_at > now:
+                delta = expires_at - now
+                name = entry["name"].replace(" - CRCON Seed VIP", "")
+                vip_entries.append((name, delta))
+        except Exception:
+            continue
+
+    if not vip_entries:
+        await channel.send("⚠️ No temporary VIPs found.")
+        return
+
+    # Sort by longest remaining time
+    vip_entries.sort(key=lambda x: x[1], reverse=True)
+
+    def format_duration(delta):
+        days = delta.days
+        hours, remainder = divmod(delta.seconds, 3600)
+        minutes = remainder // 60
+        return f"{days}d {hours}h {minutes}m"
+
+    def format_line(name, delta):
+        return f"⏰ {name} → `{format_duration(delta)}`"
+
+    # Create embed for scheduled message (first page only to avoid complexity)
+    per_page = 20
+    chunk = vip_entries[:per_page]
+    description = "\n".join(format_line(name, delta) for name, delta in chunk)
+    
+    embed = discord.Embed(
+        title="🧾 Scheduled VIP Update - Temporary VIPs (Longest to Shortest)",
+        description=description,
+        color=discord.Color.teal()
+    )
+    
+    total_vips = len(vip_entries)
+    if total_vips > per_page:
+        embed.set_footer(text=f"Showing first {per_page} of {total_vips} VIPs. Use /showvips for full list.")
+    else:
+        embed.set_footer(text=f"Total: {total_vips} temporary VIPs")
+
+    await channel.send(embed=embed)
+    logger.info(f"[SCHEDULED_VIP] Posted VIP list to channel {vip_channel_id}")
+
 # --- Reschedule helper ---
-def reschedule_job(job_id: str, time_str: str, ping: int):
+def reschedule_job(job_id: str, time_str: str, ping: int = None):
     try:
         hour, minute = int(time_str[:2]), int(time_str[2:])
-        scheduler.add_job(
-            scheduled_ping_job,
-            trigger=CronTrigger(hour=hour, minute=minute, timezone=tz),
-            id=job_id,
-            args=[job_id, time_str, ping],
-            replace_existing=True
-        )
-
-        job_config_map = {
-            "set_ping_job_1": ("SCHEDULED_JOB_1_TIME", "SCHEDULED_JOB_1_PING"),
-            "set_ping_job_2": ("SCHEDULED_JOB_2_TIME", "SCHEDULED_JOB_2_PING")
-        }
-        job_time_key, job_ping_key = job_config_map.get(job_id, (None, None))
-        if job_time_key and job_ping_key:
-            config[job_time_key] = time_str
-            config[job_ping_key] = ping
+        
+        if job_id == "scheduled_vip_job":
+            # Special handling for VIP job
+            scheduler.add_job(
+                scheduled_vip_job,
+                trigger=CronTrigger(hour=hour, minute=minute, timezone=tz),
+                id=job_id,
+                replace_existing=True
+            )
+            # Update config
+            config["SCHEDULED_VIP_TIME"] = time_str
             with open(CONFIG_PATH, "w") as f:
                 json5.dump(config, f, indent=4)
-            logger.info(f"[{job_id}] Rescheduled to {time_str} with ping {ping}")
+            logger.info(f"[{job_id}] Rescheduled to {time_str}")
         else:
-            logger.warning(f"Job ID '{job_id}' is not recognized for config update")
+            # Regular ping jobs
+            scheduler.add_job(
+                scheduled_ping_job,
+                trigger=CronTrigger(hour=hour, minute=minute, timezone=tz),
+                id=job_id,
+                args=[job_id, time_str, ping],
+                replace_existing=True
+            )
+
+            job_config_map = {
+                "set_ping_job_1": ("SCHEDULED_JOB_1_TIME", "SCHEDULED_JOB_1_PING"),
+                "set_ping_job_2": ("SCHEDULED_JOB_2_TIME", "SCHEDULED_JOB_2_PING")
+            }
+            job_time_key, job_ping_key = job_config_map.get(job_id, (None, None))
+            if job_time_key and job_ping_key:
+                config[job_time_key] = time_str
+                config[job_ping_key] = ping
+                with open(CONFIG_PATH, "w") as f:
+                    json5.dump(config, f, indent=4)
+                logger.info(f"[{job_id}] Rescheduled to {time_str} with ping {ping}")
+            else:
+                logger.warning(f"Job ID '{job_id}' is not recognized for config update")
 
     except Exception as e:
         logger.error(f"Failed to reschedule {job_id}: {e}")
+
+def toggle_vip_schedule(enabled: bool):
+    """Enable or disable the VIP schedule"""
+    try:
+        config["SCHEDULED_VIP_ENABLED"] = enabled
+        with open(CONFIG_PATH, "w") as f:
+            json5.dump(config, f, indent=4)
+        
+        if enabled and config.get("SCHEDULED_VIP_CHANNEL"):
+            # Reschedule the job
+            vip_time = config.get("SCHEDULED_VIP_TIME", "1200")
+            reschedule_job("scheduled_vip_job", vip_time)
+            logger.info(f"VIP schedule enabled at {vip_time}")
+        else:
+            # Remove the job
+            try:
+                scheduler.remove_job("scheduled_vip_job")
+                logger.info("VIP schedule disabled")
+            except:
+                pass  # Job might not exist
+                
+    except Exception as e:
+        logger.error(f"Failed to toggle VIP schedule: {e}")
 
 # --- Slash commands ---
 from datetime import datetime
@@ -416,6 +536,83 @@ async def online(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("🟢 Bot is online, but failed to reach API.")
 
+@tree.command(name="vipschedule", description="Configure VIP list scheduling")
+@app_commands.describe(
+    action="Action to perform",
+    channel="Channel to post scheduled VIP updates (only for 'setchannel')",
+    time="Time in HHMM format (only for 'settime')"
+)
+@app_commands.choices(action=[
+    app_commands.Choice(name="enable", value="enable"),
+    app_commands.Choice(name="disable", value="disable"),
+    app_commands.Choice(name="setchannel", value="setchannel"),
+    app_commands.Choice(name="settime", value="settime"),
+    app_commands.Choice(name="status", value="status")
+])
+async def vip_schedule(interaction: discord.Interaction, action: str, channel: discord.TextChannel = None, time: str = None):
+    logger.info(f"[/vipschedule] Requested by {interaction.user} (ID: {interaction.user.id}) - action: {action}")
+    
+    if action == "status":
+        enabled = config.get("SCHEDULED_VIP_ENABLED", False)
+        vip_channel_id = config.get("SCHEDULED_VIP_CHANNEL")
+        vip_time = config.get("SCHEDULED_VIP_TIME", "1200")
+        
+        status_msg = f"🧾 **VIP Schedule Status:**\n"
+        status_msg += f"📊 Enabled: {'✅ Yes' if enabled else '❌ No'}\n"
+        status_msg += f"📺 Channel: {f'<#{vip_channel_id}>' if vip_channel_id else '❌ Not set'}\n"
+        status_msg += f"🕒 Time: {vip_time[:2]}:{vip_time[2:]} ({config.get('TIMEZONE', 'Australia/Sydney')})"
+        
+        await interaction.response.send_message(status_msg)
+        
+    elif action == "enable":
+        vip_channel_id = config.get("SCHEDULED_VIP_CHANNEL")
+        if not vip_channel_id:
+            await interaction.response.send_message("❌ Please set a channel first using `/vipschedule setchannel`")
+            return
+        
+        toggle_vip_schedule(True)
+        vip_time = config.get("SCHEDULED_VIP_TIME", "1200")
+        await interaction.response.send_message(f"✅ VIP schedule enabled! Will post at {vip_time[:2]}:{vip_time[2:]} in <#{vip_channel_id}>")
+        
+    elif action == "disable":
+        toggle_vip_schedule(False)
+        await interaction.response.send_message("❌ VIP schedule disabled.")
+        
+    elif action == "setchannel":
+        if not channel:
+            await interaction.response.send_message("❌ Please specify a channel.")
+            return
+        
+        config["SCHEDULED_VIP_CHANNEL"] = channel.id
+        with open(CONFIG_PATH, "w") as f:
+            json5.dump(config, f, indent=4)
+        
+        await interaction.response.send_message(f"✅ VIP schedule channel set to {channel.mention}")
+        
+    elif action == "settime":
+        if not time:
+            await interaction.response.send_message("❌ Please specify a time in HHMM format.")
+            return
+        
+        if not time.isdigit() or len(time) != 4:
+            await interaction.response.send_message("⚠️ Invalid time format. Use HHMM (e.g., 1200 for 12:00).")
+            return
+        
+        hour, minute = int(time[:2]), int(time[2:])
+        if not (0 <= hour < 24 and 0 <= minute < 60):
+            await interaction.response.send_message("⚠️ Invalid time value.")
+            return
+        
+        # Update config and reschedule if enabled
+        config["SCHEDULED_VIP_TIME"] = time
+        with open(CONFIG_PATH, "w") as f:
+            json5.dump(config, f, indent=4)
+        
+        if config.get("SCHEDULED_VIP_ENABLED", False):
+            reschedule_job("scheduled_vip_job", time)
+        
+        await interaction.response.send_message(f"✅ VIP schedule time set to {hour:02d}:{minute:02d}")
+
 @tree.command(name="help", description="Show this help message")
 async def help_command(interaction: discord.Interaction):
     logger.info(f"[/help] Requested by {interaction.user} (ID: {interaction.user.id})")
@@ -431,8 +628,8 @@ async def help_command(interaction: discord.Interaction):
         "/setping - Set max ping autokick value (in ms)\n"
         "/curscheduledtime - Show current scheduled job times and ping values\n"
         "/setscheduledtime <job> <time> <ping> - Set scheduled job time and ping\n"
-        
-	"/showvips - Display a paginated list of temporary VIPs and how long they have left\n"
+        "/showvips - Display a paginated list of temporary VIPs and how long they have left\n"
+        "/vipschedule - Configure automatic VIP list posting (status/enable/disable/setchannel/settime)\n"
         "/online - Check if bot and API are running\n\n"
         "/help - Show this help message"
     )
@@ -813,6 +1010,12 @@ async def on_ready():
         # Reschedule jobs
         reschedule_job("set_ping_job_1", config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING"))
         reschedule_job("set_ping_job_2", config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING"))
+
+        # Initialize VIP schedule if enabled
+        if config.get("SCHEDULED_VIP_ENABLED", False) and config.get("SCHEDULED_VIP_CHANNEL"):
+            vip_time = config.get("SCHEDULED_VIP_TIME", "1200")
+            reschedule_job("scheduled_vip_job", vip_time)
+            logger.info(f"VIP schedule initialized for {vip_time}")
 
         if not scheduler.running:
             scheduler.start()
