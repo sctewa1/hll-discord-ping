@@ -9,8 +9,3 @@ services:
     restart: unless-stopped
     networks:
       - hll_common
-
-networks:
-  hll_common:
-    external: true
-    name: hll_rcon_tool_common
