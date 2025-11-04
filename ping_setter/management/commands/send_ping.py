@@ -713,13 +713,13 @@ async def on_ready():
         reschedule_job("set_ping_job_2", config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING"))
 
 		# Schedule channel counter (every 6 min)
-		if COUNTER_ENABLED:
-		    try:
-		        scheduler.add_job(update_channel_counter, CronTrigger.from_crontab(COUNTER_CRON, timezone=tz))
-		        logger.info(f"Channel counter scheduled: {COUNTER_CRON}")
-		    except Exception:
-		        scheduler.add_job(update_channel_counter, CronTrigger(minute='*/6', timezone=tz))
-		        logger.info("Channel counter scheduled: */6 (fallback)")
+        if COUNTER_ENABLED:
+            try:
+                scheduler.add_job(update_channel_counter, CronTrigger.from_crontab(COUNTER_CRON, timezone=tz))
+                logger.info(f"Channel counter scheduled: {COUNTER_CRON}")
+            except Exception:
+                scheduler.add_job(update_channel_counter, CronTrigger(minute='*/6', timezone=tz))
+                logger.info("Channel counter scheduled: */6 (fallback)")
 
         if not scheduler.running:
             scheduler.start()
