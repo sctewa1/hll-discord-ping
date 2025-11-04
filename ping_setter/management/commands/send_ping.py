@@ -84,6 +84,75 @@ except Exception:
     tz = timezone("Australia/Sydney")
 scheduler = AsyncIOScheduler(timezone=tz)
 
+# ---- Channel Counter config ----
+channel_counter_cfg = config.get("channel_counter", {})
+COUNTER_ENABLED = bool(channel_counter_cfg.get("enabled", False))
+COUNTER_CRON    = str(channel_counter_cfg.get("schedule", "*/6 * * * *"))
+COUNTER_CH_ID   = int(channel_counter_cfg.get("discord_channel_id", 0) or 0)
+AUS_URL         = channel_counter_cfg.get("aus_url")
+USA_URL         = channel_counter_cfg.get("usa_url")
+COUNTER_STATE   = channel_counter_cfg.get("state_file", "/opt/ping_setter_hll/logs/counter_state.txt")
+HTTP_TIMEOUT    = int(channel_counter_cfg.get("http_timeout", 8))
+
+def _read_last_label():
+    try:
+        return Path(COUNTER_STATE).read_text(encoding="utf-8").strip()
+    except Exception:
+        return ""
+
+def _write_last_label(label: str):
+    try:
+        Path(COUNTER_STATE).parent.mkdir(parents=True, exist_ok=True)
+        Path(COUNTER_STATE).write_text(label, encoding="utf-8")
+    except Exception:
+        logger.warning("Could not write state file for channel counter", exc_info=True)
+
+async def _fetch_players(session: aiohttp.ClientSession, url: str) -> int:
+    try:
+        async with session.get(url, timeout=HTTP_TIMEOUT) as r:
+            data = await r.json(content_type=None)
+        n = (
+            (data.get("result") or {}).get("player_count")
+            or (data.get("body") or {}).get("player_count")
+            or data.get("numplayers")
+            or (data.get("body") or {}).get("numplayers")
+        )
+        return max(0, int(n or 0))
+    except Exception as e:
+        logger.warning(f"fetch_numplayers error for {url}: {e}")
+        return 0
+
+def _build_label(aus: int, usa: int) -> str:
+    return f"🇺🇸 {usa}/100 ❖ 🇦🇺 {aus}/100"
+
+async def update_channel_counter():
+    if not COUNTER_ENABLED:
+        return
+    if not COUNTER_CH_ID or not AUS_URL or not USA_URL:
+        logger.warning("channel_counter enabled but missing channel id or URLs")
+        return
+
+    async with aiohttp.ClientSession() as session:
+        aus = await _fetch_players(session, AUS_URL)
+        usa = await _fetch_players(session, USA_URL)
+    label = _build_label(aus, usa)
+
+    last = _read_last_label()
+    if label == last:
+        logger.debug(f"[counter] No change: {label}")
+        return
+
+    ch = client.get_channel(COUNTER_CH_ID)
+    if ch is None:
+        logger.info("[counter] Channel not cached yet; will retry next run")
+        return
+
+    try:
+        await ch.edit(name=label, reason="ANZR player count update")
+        logger.info(f"[counter] Renamed channel -> {label}")
+        _write_last_label(label)
+    except Exception:
+        logger.exception("[counter] Failed to rename channel")
 
 # Discord bot setup (only slash commands)
 intents = discord.Intents.default()
@@ -642,6 +711,15 @@ async def on_ready():
         # Reschedule jobs
         reschedule_job("set_ping_job_1", config.get("SCHEDULED_JOB_1_TIME"), config.get("SCHEDULED_JOB_1_PING"))
         reschedule_job("set_ping_job_2", config.get("SCHEDULED_JOB_2_TIME"), config.get("SCHEDULED_JOB_2_PING"))
+
+		# Schedule channel counter (every 6 min)
+		if COUNTER_ENABLED:
+		    try:
+		        scheduler.add_job(update_channel_counter, CronTrigger.from_crontab(COUNTER_CRON, timezone=tz))
+		        logger.info(f"Channel counter scheduled: {COUNTER_CRON}")
+		    except Exception:
+		        scheduler.add_job(update_channel_counter, CronTrigger(minute='*/6', timezone=tz))
+		        logger.info("Channel counter scheduled: */6 (fallback)")
 
         if not scheduler.running:
             scheduler.start()
