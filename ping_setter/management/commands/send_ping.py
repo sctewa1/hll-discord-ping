@@ -593,7 +593,7 @@ async def bantemp(interaction: discord.Interaction, name_prefix: str):
 @app_commands.checks.cooldown(1, 3600.0)
 async def show_vips(interaction: discord.Interaction):
     # Restrict to #general only
-    if interaction.channel.id != CHANNEL_ID_VIPSTATS:
+    if interaction.channel.id != CHANNEL_ID_VIPstats:
         await interaction.response.send_message(
             "⚠️ You can only run this command in #general.",
             ephemeral=True
@@ -691,8 +691,176 @@ async def show_vips(interaction: discord.Interaction):
         view.message = await interaction.original_response()
 
 
+import calendar
+from discord import Embed
+
+@tree.command(name="playerstats", description="Show all-time stats for a player by name")
+@app_commands.describe(player_name="All or part of the player's name")
+async def playerstats(interaction: discord.Interaction, player_name: str):
+    logger.info(f"[/playerstats] Requested by {interaction.user} (ID: {interaction.user.id}), search: {player_name}")
+
+      # Restrict to stats channel only
+    if interaction.channel.id != CHANNEL_ID_STATS:
+        await interaction.response.send_message(
+            "This command can only be used in the stats channel.", ephemeral=True
+        )
+        return
+
+    await interaction.response.defer()  # not ephemeral
+
+    # Search for players
+    with engine.connect() as conn:
+        query = text("""
+            SELECT name, playersteamid_id
+            FROM (
+                SELECT DISTINCT ON (pn.playersteamid_id)
+                    pn.playersteamid_id,
+                    pn.name,
+                    pn.last_seen
+                FROM player_names pn
+                WHERE pn.name ILIKE :search
+                ORDER BY pn.playersteamid_id, pn.last_seen DESC
+            ) sub
+            ORDER BY sub.last_seen DESC
+            LIMIT 20
+        """)
+        results = conn.execute(query, {"search": f"{player_name}%"}).fetchall()
+
+    if not results:
+        await interaction.followup.send("No matching players found.")
+        return
 
 
+    # Combine steam_id and name into value so we keep the exact selected name
+    options = [
+        discord.SelectOption(
+            label=row.name[:100],
+            value=f"{row.playersteamid_id}|{row.name[:100]}"
+        )
+        for row in results
+    ]
+
+    class PlayerSelect(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=30)
+            self.select = discord.ui.Select(
+                placeholder="Select a player",
+                options=options,
+                min_values=1,
+                max_values=1,
+            )
+            self.select.callback = self.select_callback
+            self.add_item(self.select)
+
+        async def select_callback(self, select_interaction: discord.Interaction):
+            steam_id_str, player_display_name = self.select.values[0].split("|")
+            steam_id = int(steam_id_str)
+
+            with engine.connect() as conn:
+                # All-time stats
+                all_time_query = text("""
+                    SELECT
+                        COUNT(*) AS matches_played,
+                        SUM(kills) AS total_kills,
+                        SUM(deaths) AS total_deaths,
+                        MAX(kills_streak) AS best_kill_streak,
+                        AVG(kill_death_ratio) AS avg_kdr,
+                        SUM(time_seconds) AS total_time_seconds
+                    FROM player_stats
+                    WHERE playersteamid_id = :steam_id
+                """)
+                all_time = conn.execute(all_time_query, {"steam_id": steam_id}).fetchone()
+
+                # Last 6 months
+                monthly_query = text("""
+                    SELECT
+                        TO_CHAR(m.start, 'YYYY-MM') AS month,
+                        COUNT(*) AS matches,
+                        SUM(kills) AS kills,
+                        SUM(deaths) AS deaths,
+                        MAX(kills_streak) AS best_kill_streak,
+                        AVG(kill_death_ratio) AS avg_kdr,
+                        SUM(time_seconds) AS time_seconds
+                    FROM player_stats ps
+                    JOIN map_history m ON ps.map_id = m.id
+                    WHERE ps.playersteamid_id = :steam_id
+                    GROUP BY month
+                    ORDER BY month DESC
+                    LIMIT 6
+                """)
+                recent_rows = conn.execute(monthly_query, {"steam_id": steam_id}).fetchall()
+
+            # Compute stats
+            total_kills = all_time.total_kills or 0
+            total_deaths = all_time.total_deaths or 0
+            matches_played = all_time.matches_played or 0
+            total_seconds = all_time.total_time_seconds or 0
+            all_time_kdr = total_kills / total_deaths if total_deaths else 0
+            best_kill_streak = all_time.best_kill_streak or 0
+            total_hours = total_seconds // 3600
+            total_minutes = (total_seconds % 3600) // 60
+
+            def format_month_row(row):
+                kdr = f"{row.avg_kdr:.2f}" if row.avg_kdr else "0.00"
+                hours = int((row.time_seconds or 0) / 3600)
+                short_month = calendar.month_abbr[int(row.month[-2:])]
+                return f"📆 {short_month} — {row.kills} / {row.deaths} / {row.matches} / {kdr} 🎯 {row.best_kill_streak} 🕒 {hours}h"
+
+            recent_kills = sum(r.kills for r in recent_rows)
+            recent_deaths = sum(r.deaths for r in recent_rows)
+            recent_matches = sum(r.matches for r in recent_rows)
+            recent_seconds = sum(r.time_seconds for r in recent_rows)
+
+            monthly_lines = [format_month_row(r) for r in recent_rows]
+
+            earlier_kills = total_kills - recent_kills
+            earlier_deaths = total_deaths - recent_deaths
+            earlier_games = matches_played - recent_matches
+            earlier_kdr = earlier_kills / earlier_deaths if earlier_deaths else 0
+            earlier_hours = (total_seconds - recent_seconds) // 3600
+
+            requester = select_interaction.user.display_name
+
+            embed = Embed(
+                title=f"📊 {requester} requested stats for `{player_display_name}`",
+                color=discord.Color.blurple()
+            )
+
+            embed.add_field(
+                name="🏅 All-Time Totals",
+                value=(
+                    f"• Games: **{matches_played}**\n"
+                    f"• Kills / Deaths: **{total_kills} / {total_deaths}**\n"
+                    f"• K/D Ratio: **{all_time_kdr:.2f}**\n"
+                    f"• Best Kill Streak: **{best_kill_streak}**\n"
+                    f"• Time Played: **{total_hours}h {total_minutes}m**"
+                ),
+                inline=False
+            )
+
+            embed.add_field(
+                name="🗓️ Last 6 Months (K/D/G/R 🎯 🕒)",
+                value="\n".join(monthly_lines),
+                inline=False
+            )
+
+            embed.add_field(
+                name="📦 Earlier",
+                value=(
+                    f"{earlier_kills} / {earlier_deaths} / {earlier_games} / "
+                    f"{earlier_kdr:.2f} 🎯 {best_kill_streak} 🕒 {earlier_hours}h"
+                ),
+                inline=False
+            )
+
+            await select_interaction.response.send_message(embed=embed)
+
+            logger.info(
+                f"/playerstats used by {requester} ({select_interaction.user.id}) "
+                f"for Steam ID {steam_id}"
+            )
+
+    await interaction.followup.send("Select a player:", view=PlayerSelect())
 
 # --- Bot startup ---
 
