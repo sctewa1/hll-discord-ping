@@ -5,94 +5,91 @@ import logging
 import subprocess
 import requests
 import aiohttp
+import asyncio
 from pathlib import Path
-from discord import Embed
 
 import discord
-import asyncio
+from discord import Embed, app_commands
 from discord.ext import commands
-from discord import app_commands
+
 from django.core.management.base import BaseCommand
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from pytz import timezone
+
 from .logging_config import setup_logging
 
-# Absolute path to config.jsonc inside the container.
-CONFIG_PATH = "/opt/ping_setter_hll/config.jsonc"
+# --------------------------------------------------------------------
+# Load configuration and secrets
+# --------------------------------------------------------------------
 
-# Logging setup
+CONFIG_PATH = os.environ.get("CONFIG_PATH", "/app/config.jsonc")
 logger = setup_logging()
 
-# Load config from config.jsonc
 def load_config():
-    """
-    Try loading config from several known locations, falling back to defaults.
-    """
-    paths = [
-        CONFIG_PATH,
-        os.path.join(os.getcwd(), "config.jsonc"),
-    ]
-    for p in paths:
-        try:
+    """Load config.jsonc from known locations."""
+    for p in [CONFIG_PATH, os.path.join(os.getcwd(), "config.jsonc")]:
+        if os.path.exists(p):
             with open(p, "r") as f:
                 logger.info(f"Loaded config from: {p}")
                 return json5.load(f)
-        except FileNotFoundError:
-            logger.debug(f"Config not found at: {p}")
-    logger.error("Config file not found in any of the expected paths; using default settings.")
-    return {
-        "DISCORD_TOKEN": "",
-        "CHANNEL_ID": None,
-	"CHANNEL_ID_STATS": None,
-	"CHANNEL_ID_VIPSTATS": None,
-        "API_BASE_URL": "",
-        "API_BEARER_TOKEN": "",
-        "TIMEZONE": "Australia/Sydney",
-        "SCHEDULED_JOB_1_TIME": "0009",
-        "SCHEDULED_JOB_1_PING": 500,
-        "SCHEDULED_JOB_2_TIME": "1500",
-        "SCHEDULED_JOB_2_PING": 320,
-        "LOG_DIR": "/opt/ping_setter_hll/logs"
-    }
-# Load configuration
+    logger.warning("No config.jsonc found; using defaults.")
+    return {}
+
 config = load_config()
 
-# Required settings
-DISCORD_TOKEN    = config.get("DISCORD_TOKEN")
-CHANNEL_ID       = config.get("CHANNEL_ID")
-CHANNEL_ID_STATS = config.get("CHANNEL_ID_stats")
-CHANNEL_ID_VIPSTATS = config.get("CHANNEL_ID_VIPstats")
-API_BASE_URL     = config.get("API_BASE_URL")
-API_BEARER_TOKEN = config.get("API_BEARER_TOKEN")
+# Helper to prioritise environment variables (Fly secrets)
+def get_setting(env_key: str, json_key: str, default=None):
+    return os.environ.get(env_key) or config.get(json_key, default)
 
-if not DISCORD_TOKEN or CHANNEL_ID is None or not API_BASE_URL or not API_BEARER_TOKEN:
-    raise ValueError("Essential configuration missing in config.jsonc")
+# --------------------------------------------------------------------
+# Core settings
+# --------------------------------------------------------------------
+DISCORD_TOKEN        = get_setting("DISCORD_TOKEN", "DISCORD_TOKEN")
+CHANNEL_ID           = int(get_setting("CHANNEL_ID", "CHANNEL_ID", 0) or 0)
+CHANNEL_ID_STATS     = int(get_setting("CHANNEL_ID_stats", "CHANNEL_ID_stats", 0) or 0)
+CHANNEL_ID_VIPSTATS  = int(get_setting("CHANNEL_ID_VIPstats", "CHANNEL_ID_VIPstats", 0) or 0)
+API_BASE_URL         = get_setting("API_BASE_URL", "API_BASE_URL", "")
+API_BEARER_TOKEN     = get_setting("API_BEARER_TOKEN", "API_BEARER_TOKEN", "")
+LOG_DIR              = get_setting("LOG_DIR", "LOG_DIR", "/logs")
 
-# Prepare headers for API calls
+# --------------------------------------------------------------------
+# Validation
+# --------------------------------------------------------------------
+if not DISCORD_TOKEN:
+    raise ValueError("Missing DISCORD_TOKEN (Fly secret or config.jsonc)")
+if not API_BASE_URL or not API_BEARER_TOKEN:
+    raise ValueError("Missing API_BASE_URL or API_BEARER_TOKEN")
+
+# --------------------------------------------------------------------
+# Prepare headers and scheduler
+# --------------------------------------------------------------------
 HEADERS = {
     "Authorization": f"Bearer {API_BEARER_TOKEN}",
-    "Content-Type": "application/json"
+    "Content-Type": "application/json",
 }
 
-# Scheduler timezone
-tz_name = config.get("TIMEZONE", "Australia/Sydney")
+tz_name = get_setting("TIMEZONE", "TIMEZONE", "Australia/Sydney")
 try:
     tz = timezone(tz_name)
 except Exception:
     logger.warning(f"Invalid timezone '{tz_name}', defaulting to Australia/Sydney")
     tz = timezone("Australia/Sydney")
+
 scheduler = AsyncIOScheduler(timezone=tz)
 
-# ---- Channel Counter config ----
+# --------------------------------------------------------------------
+# Channel Counter
+# --------------------------------------------------------------------
 channel_counter_cfg = config.get("channel_counter", {})
-COUNTER_ENABLED = bool(channel_counter_cfg.get("enabled", False))
-COUNTER_CRON    = str(channel_counter_cfg.get("schedule", "*/6 * * * *"))
-COUNTER_CH_ID   = int(channel_counter_cfg.get("discord_channel_id", 0) or 0)
-AUS_URL         = channel_counter_cfg.get("aus_url")
-USA_URL         = channel_counter_cfg.get("usa_url")
-COUNTER_STATE   = channel_counter_cfg.get("state_file", "/opt/ping_setter_hll/logs/counter_state.txt")
-HTTP_TIMEOUT    = int(channel_counter_cfg.get("http_timeout", 8))
+COUNTER_ENABLED = bool(get_setting("CHANNEL_COUNTER_ENABLED", "enabled", channel_counter_cfg.get("enabled", False)))
+COUNTER_CRON    = get_setting("CHANNEL_COUNTER_SCHEDULE", "schedule", channel_counter_cfg.get("schedule", "*/6 * * * *"))
+COUNTER_CH_ID   = int(get_setting("CHANNEL_COUNTER_DISCORD_CHANNEL_ID", "discord_channel_id", channel_counter_cfg.get("discord_channel_id", 0)) or 0)
+AUS_URL         = get_setting("CHANNEL_COUNTER_AUS_URL", "aus_url", channel_counter_cfg.get("aus_url"))
+USA_URL         = get_setting("CHANNEL_COUNTER_USA_URL", "usa_url", channel_counter_cfg.get("usa_url"))
+HTTP_TIMEOUT    = int(get_setting("CHANNEL_COUNTER_HTTP_TIMEOUT", "http_timeout", channel_counter_cfg.get("http_timeout", 8)))
+COUNTER_STATE   = get_setting("CHANNEL_COUNTER_STATE_FILE", "state_file", channel_counter_cfg.get("state_file", "/logs/counter_state.txt"))
+
 
 def _read_last_label():
     try:

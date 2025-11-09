@@ -1,22 +1,24 @@
-# Base image with SSL working out of the box
-FROM python:3.11
+﻿FROM python:3.12-slim
 
-WORKDIR /opt/ping_setter_hll
+ENV PYTHONUNBUFFERED=1 \
+    TZ=Australia/Sydney \
+    CONFIG_PATH=/app/config.jsonc \
+    PYTHONPATH=/app
 
-# Install system packages
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
-# Copy project files
-COPY . /opt/ping_setter_hll/
+# System deps for tz + certs
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies globally (this is okay in Docker)
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+# Python deps
+COPY requirements.txt .
+RUN pip install --no-cache-dir -U pip && pip install --no-cache-dir -r requirements.txt
 
-EXPOSE 8000
+# App code + config
+COPY . .
+# optional: ensure the logger path exists if your logging_config writes there
+RUN mkdir -p /logs
 
-CMD ["python", "manage.py", "run_discord"]
-
+# Run the Django management command (no --config arg)
+CMD ["python","-u","manage.py","send_ping"]

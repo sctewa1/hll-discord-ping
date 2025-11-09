@@ -1,0 +1,13 @@
+app = "anzr-ping-bot"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[processes]
+  app = "python -u manage.py send_ping"
+
+[vm]
+  memory = 256
+  cpu_kind = "shared"
+  cpus = 1

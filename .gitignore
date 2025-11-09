@@ -7,7 +7,6 @@ env/
 venv/
 .env
 
-config.jsonc
 
 # Logs
 *.log

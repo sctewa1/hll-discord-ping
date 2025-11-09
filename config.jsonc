@@ -1,0 +1,32 @@
+{
+  // Core bot settings
+  "DISCORD_TOKEN": "DummyEntryRealOneComesFromSecretsOrEditTHis",
+  "CHANNEL_ID": 0,
+  "CHANNEL_ID_stats": 0,
+  "CHANNEL_ID_VIPstats": 0,
+
+  // CRCON API
+  "API_BEARER_TOKEN": "DummyEntryRealOneComesFromSecretsOrEditTHis",
+  "API_BASE_URL": "DummyEntryRealOneComesFromSecretsOrEditTHis",
+
+  // Timezone and logging
+  "TIMEZONE": "Australia/Sydney",
+  "LOG_DIR": "/logs",
+
+  // Scheduled ping jobs
+  "SCHEDULED_JOB_1_TIME": "2259",
+  "SCHEDULED_JOB_1_PING": 560,
+  "SCHEDULED_JOB_2_TIME": "1505",
+  "SCHEDULED_JOB_2_PING": 349,
+
+  // Channel counter task
+  "channel_counter": {
+    "enabled": true,
+    "schedule": "*/6 * * * *",
+    "discord_channel_id": 0,
+    "aus_url": "https://localhostserver1/api/get_public_info",
+    "usa_url": "https://localhostServer2/api/get_public_info",
+    "http_timeout": 8,
+    "state_file": "/logs/counter_state.txt"
+  }
+}
