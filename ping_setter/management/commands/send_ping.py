@@ -212,32 +212,27 @@ def set_max_ping_autokick(ping: int) -> bool:
         logger.error(f"Failed to set max ping: {e}")
         return False
 
-def get_recent_bans(limit=5):
+def get_recent_temp_bans(limit=5):
     try:
-        r = requests.get(f"{API_BASE_URL}/api/get_bans", headers=HEADERS)
+        r = requests.get(f"{API_BASE_URL}/api/get_bans", headers=HEADERS, timeout=10)
         r.raise_for_status()
+
         bans = r.json().get("result", [])
-        return list(reversed([b for b in bans if b.get("type") == "temp" and b.get("player_id")]))[:limit]
+
+        # Keep only temp bans with player_id
+        temp = [
+            b for b in bans
+            if b.get("type") == "temp" and b.get("player_id")
+        ]
+
+        # Sort newest first
+        temp.sort(key=lambda b: b.get("ban_time") or "", reverse=True)
+
+        return temp[:limit]
+
     except Exception as e:
         logger.error(f"Failed to fetch bans: {e}")
         return []
-
-def get_player_name(player_id: str) -> str:
-    try:
-        r = requests.get(
-            f"{API_BASE_URL}/api/get_player_profile",
-            headers=HEADERS,
-            params={"player_id": player_id}
-        )
-        r.raise_for_status()
-        names = r.json().get("result", {}).get("names", [])
-        if names:
-            names.sort(key=lambda n: n.get("last_seen", ""), reverse=True)
-            return names[0].get("name", "Unknown")
-        return "Unknown"
-    except Exception as e:
-        logger.error(f"Failed to fetch player profile: {e}")
-        return "Unknown"
 
 def unban_player(player_id: str) -> bool:
     try:
@@ -421,54 +416,71 @@ async def setscheduledtime(interaction: discord.Interaction, job: int, time: str
 @tree.command(name="bans", description="Show last 5 temp bans")
 async def bans(interaction: discord.Interaction):
     logger.info(f"[/bans] Requested by {interaction.user} (ID: {interaction.user.id})")
-    
-    # Fetch recent bans
-    data = get_recent_bans()
-    
-    # Ensure that data is in list format and filter only temp bans with valid player_id
-    temp_bans = [
-        b for b in data if b.get("type") == "temp" and b.get("player_id") is not None
-    ]
-    
-    # Check if there are any temp bans
-    if not temp_bans:
-        return await interaction.response.send_message("⚠️ No temp bans found.")
-    
-    # Create list of temp bans (we only want the last 5)
+
+    # Respond immediately
+    await interaction.response.defer(ephemeral=False)
+
+    bans = get_recent_temp_bans()
+
+    if not bans:
+        return await interaction.followup.send(
+            "⚠️ No temp bans found.",
+            ephemeral=False
+        )
+
     lines = []
-    for i, b in enumerate(temp_bans[:5]):  # Only show the last 5 bans
-        player_name = get_player_name(b['player_id'])  # Assuming this function works properly
-        lines.append(f"`{i + 1}` - {player_name} (ID: `{b['player_id']}`)")
 
-    # Send the list of temp bans
-    await interaction.response.send_message("**Last 5 Temp Bans:**\n" + "\n".join(lines))
+    for i, b in enumerate(bans, start=1):
+        name = (b.get("name") or "Unknown").strip()
+        pid = b.get("player_id")
+        reason = (b.get("reason") or "").strip()
+        by = b.get("by") or "system"
 
-@tree.command(name="unban", description="Unban player by ban number from the last /bans list")
-@app_commands.describe(index="Ban number from the /bans list (1-5)")
+        if len(reason) > 80:
+            reason = reason[:77] + "..."
+
+        lines.append(
+            f"`{i}` **{name}** "
+            f"(ID: `{pid}`)\n"
+            f" 📝 {reason}\n"
+            f" 👮 {by}"
+        )
+
+    await interaction.followup.send(
+        "**🛑 Latest Temp Bans:**\n\n" + "\n".join(lines),
+        ephemeral=False
+    )
+
+@tree.command(name="unban", description="Unban player by number from /bans")
+@app_commands.describe(index="Ban number from /bans list (1-5)")
 async def unban(interaction: discord.Interaction, index: int):
     logger.info(f"[/unban] Requested by {interaction.user} (ID: {interaction.user.id}), index: {index}")
- 
-    data = get_recent_bans()
-    if not data:
-        await interaction.response.send_message("⚠️ No bans to unban.")
-        logger.info(f"User `{interaction.user.name}` attempted to unban a player, but no bans were found.")
-        return
 
-    if 1 <= index <= len(data):
-        player_id = data[index - 1]["player_id"]
-        name = get_player_name(player_id)
-        success = unban_player(player_id)
+    await interaction.response.defer(ephemeral=False)
 
-        if success:
-            await interaction.response.send_message(f"✅ Unbanned `{name}` (ID: `{player_id}`)")
-            logger.info(f"User `{interaction.user.name}` successfully unbanned player `{name}` (ID: `{player_id}`)")
-        else:
-            await interaction.response.send_message("❌ Failed to unban player.")
-            logger.error(f"User `{interaction.user.name}` failed to unban player `{name}` (ID: `{player_id}`).")
+    bans = get_recent_temp_bans(limit=10)
+
+    if not bans:
+        return await interaction.followup.send("⚠️ No bans found.", ephemeral=False)
+
+    if not (1 <= index <= len(bans)):
+        return await interaction.followup.send("⚠️ Invalid index.", ephemeral=False)
+
+    ban = bans[index - 1]
+
+    pid = ban["player_id"]
+    name = ban.get("name") or "Unknown"
+
+    success = unban_player(pid)
+
+    if success:
+        await interaction.followup.send(
+            f"✅ Unbanned **{name}** (`{pid}`)",
+            ephemeral=False
+        )
+        logger.info(f"{interaction.user.name} unbanned {name} ({pid})")
     else:
-        await interaction.response.send_message("⚠️ Invalid ban index.")
-        logger.warning(f"User `{interaction.user.name}` provided an invalid index `{index}` when attempting to unban a player.")
-
+        await interaction.followup.send("❌ Failed to unban.", ephemeral=False)
 
 @tree.command(name="online", description="Check if bot and API are running")
 async def online(interaction: discord.Interaction):
